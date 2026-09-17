@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #060911;
+    color: #f1f5f9;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e2d4a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #00f0ff;
+}
+
+/* Custom Glass & NOC Panels */
+.noc-glass {
+  background: rgba(12, 19, 34, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(30, 45, 74, 0.6);
+}
+
+.noc-card-glow {
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.08);
+}
+
+.noc-purple-glow {
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.15);
+}
+
+.noc-red-glow {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+/* Pulse keyframes for live markers & indicators */
+@keyframes noc-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.15);
+  }
+}
+
+.animate-noc-pulse {
+  animation: noc-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Leaflet Map Custom NOC Dark Theme */
+.leaflet-container {
+  background: #080d19 !important;
+  font-family: inherit;
+}
+
+.leaflet-tile {
+  filter: brightness(0.7) invert(1) contrast(1.3) hue-rotate(200deg) saturate(0.8) !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #0c1322 !important;
+  color: #f1f5f9 !important;
+  border: 1px solid #1e2d4a !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8) !important;
+}
+
+.leaflet-popup-tip {
+  background: #0c1322 !important;
+}
+
+.leaflet-control-zoom a {
+  background-color: #0c1322 !important;
+  color: #00f0ff !important;
+  border-color: #1e2d4a !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background-color: #1a2944 !important;
+}
