@@ -257,6 +257,7 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     setSelectedCell(newCell);
+    setSubmittedCell(newCell);
 
     // Trigger alert if critical/anomaly
     if (status === 'critical' || status === 'anomaly') {

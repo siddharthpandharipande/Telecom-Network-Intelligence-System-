@@ -6,10 +6,10 @@ import { StatusBadge } from '../components/common/StatusBadge';
 import { useTelemetry } from '../context/TelemetryContext';
 import { SVM_INPUT_FACTORS } from '../data/mockTelecomData';
 
-const RISK_DISTRIBUTION = [
-  { name: 'Normal (Low Risk)', value: 2102, color: '#10b981' },
-  { name: 'At Risk (High Confidence)', value: 384, color: '#ef4444' }
-];
+const RISK_DISTRIBUTION_COLORS = {
+  normal: '#10b981',
+  atRisk: '#ef4444'
+};
 
 export const SVMPrediction: React.FC = () => {
   const navigate = useNavigate();
@@ -18,6 +18,19 @@ export const SVMPrediction: React.FC = () => {
   // Active target cell (uses submittedCell if present, or selectedCell/main demo cell)
   const activeCell = submittedCell || cells.find(c => c.id === 'MH-PN-102') || cells[0];
   const highRiskCells = cells.filter(c => c.svmRiskCategory === 'At Risk');
+
+  // Dynamic Risk Distribution Metrics calculated from active telecom cells
+  const normalCount = cells.filter(c => c.svmRiskCategory === 'Normal').length;
+  const atRiskCount = cells.filter(c => c.svmRiskCategory === 'At Risk').length;
+  const totalCount = cells.length;
+
+  const normalPct = totalCount > 0 ? ((normalCount / totalCount) * 100).toFixed(1) : '0';
+  const atRiskPct = totalCount > 0 ? ((atRiskCount / totalCount) * 100).toFixed(1) : '0';
+
+  const dynamicRiskDistribution = [
+    { name: 'Normal Class', value: normalCount, color: RISK_DISTRIBUTION_COLORS.normal },
+    { name: 'At Risk Class', value: atRiskCount, color: RISK_DISTRIBUTION_COLORS.atRisk }
+  ];
 
   return (
     <div className="p-6 space-y-6 font-mono">
@@ -206,27 +219,35 @@ export const SVMPrediction: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e2d4a]">
-                {highRiskCells.map(cell => (
-                  <tr key={cell.id} className="hover:bg-[#111b30] transition-colors">
-                    <td className="p-3 font-bold text-cyan-400">{cell.id}</td>
-                    <td className="p-3 uppercase text-slate-300 font-bold">{cell.assetType}</td>
-                    <td className="p-3 text-slate-300">{cell.region}</td>
-                    <td className="p-3 font-bold text-purple-400">{cell.svmRiskScore}%</td>
-                    <td className="p-3 text-slate-300">{cell.svmMainFactor}</td>
-                    <td className="p-3"><StatusBadge status={cell.svmRiskCategory} size="sm" /></td>
-                    <td className="p-3 text-right">
-                      <button
-                        onClick={() => {
-                          setSelectedCell(cell);
-                          navigate('/map');
-                        }}
-                        className="px-2.5 py-1 rounded bg-[#1e2d4a] hover:bg-cyan-600 text-slate-200 hover:text-black font-bold text-[11px]"
-                      >
-                        VIEW ON MAP
-                      </button>
+                {highRiskCells.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-4 text-center text-slate-400 font-mono">
+                      No 'At Risk' telecom assets detected in current inventory.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  highRiskCells.map(cell => (
+                    <tr key={cell.id} className="hover:bg-[#111b30] transition-colors">
+                      <td className="p-3 font-bold text-cyan-400">{cell.id}</td>
+                      <td className="p-3 uppercase text-slate-300 font-bold">{cell.assetType}</td>
+                      <td className="p-3 text-slate-300">{cell.region}</td>
+                      <td className="p-3 font-bold text-purple-400">{cell.svmRiskScore}%</td>
+                      <td className="p-3 text-slate-300">{cell.svmMainFactor}</td>
+                      <td className="p-3"><StatusBadge status={cell.svmRiskCategory} size="sm" /></td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => {
+                            setSelectedCell(cell);
+                            navigate('/map');
+                          }}
+                          className="px-2.5 py-1 rounded bg-[#1e2d4a] hover:bg-cyan-600 text-slate-200 hover:text-black font-bold text-[11px]"
+                        >
+                          VIEW ON MAP
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -243,7 +264,7 @@ export const SVMPrediction: React.FC = () => {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={RISK_DISTRIBUTION}
+                  data={dynamicRiskDistribution}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -251,7 +272,7 @@ export const SVMPrediction: React.FC = () => {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {RISK_DISTRIBUTION.map((entry, index) => (
+                  {dynamicRiskDistribution.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -269,14 +290,14 @@ export const SVMPrediction: React.FC = () => {
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                 <span className="text-slate-300">Normal Class</span>
               </span>
-              <span className="font-extrabold text-emerald-400">2,102 (84.5%)</span>
+              <span className="font-extrabold text-emerald-400">{normalCount.toLocaleString()} ({normalPct}%)</span>
             </div>
             <div className="flex items-center justify-between p-2 rounded bg-[#080d19]">
               <span className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
                 <span className="text-slate-300">At Risk Class</span>
               </span>
-              <span className="font-extrabold text-red-400">384 (15.5%)</span>
+              <span className="font-extrabold text-red-400">{atRiskCount.toLocaleString()} ({atRiskPct}%)</span>
             </div>
           </div>
         </div>
