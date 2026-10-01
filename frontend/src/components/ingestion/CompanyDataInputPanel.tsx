@@ -162,9 +162,59 @@ export const CompanyDataInputPanel: React.FC = () => {
       {/* Manual Input Form */}
       {activeTab === 'manual' && (
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-            <span>ENTER TELEMETRY PARAMETERS (EXACT 13 FIELDS)</span>
-            <span className="text-cyan-400 text-[10px]">* Required fields</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1e2d4a] pb-2">
+            <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+              <span>ENTER TELEMETRY PARAMETERS (EXACT 13 FIELDS)</span>
+            </div>
+
+            {/* Quick Fill Preset Sample Buttons */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-400">QUICK FILL:</span>
+              <button
+                type="button"
+                onClick={() => setFormData({
+                  cellId: 'MH-PN-999',
+                  assetType: 'cell',
+                  latitude: 18.5204,
+                  longitude: 73.8567,
+                  location: 'Pune',
+                  signalStrength: -106,
+                  latency: 185,
+                  packetLoss: 12.4,
+                  throughput: 4.2,
+                  connectedUsers: 1850,
+                  trafficLoad: 96,
+                  callDropRate: 6.8,
+                  resourceUtil: 98,
+                  timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                })}
+                className="px-2.5 py-1 rounded bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-[11px] font-bold transition-all shadow-sm flex items-center gap-1"
+              >
+                <span>🚨 LOAD HIGH RISK PRESET</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({
+                  cellId: 'KA-BL-101',
+                  assetType: 'router',
+                  latitude: 12.9716,
+                  longitude: 77.5946,
+                  location: 'Bangalore',
+                  signalStrength: -65,
+                  latency: 24,
+                  packetLoss: 0.3,
+                  throughput: 260.0,
+                  connectedUsers: 140,
+                  trafficLoad: 32,
+                  callDropRate: 0.2,
+                  resourceUtil: 38,
+                  timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
+                })}
+                className="px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold transition-all shadow-sm flex items-center gap-1"
+              >
+                <span>🟢 LOAD NORMAL PRESET</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
