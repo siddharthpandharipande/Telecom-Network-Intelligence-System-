@@ -107,14 +107,9 @@ def predict_single_record(raw_record: dict):
     # D. Timestamp Decomposition & Peak Hour Flag
     try:
         ts = pd.to_datetime(timestamp_str)
-        year = ts.year
-        month = ts.month
-        day = ts.day
-        hour = ts.hour
-        day_of_week = ts.dayofweek
-        peak_hour = 1 if (18 <= hour <= 22) else 0
+        peak_hour = 1 if (18 <= ts.hour <= 22) else 0
     except Exception:
-        year, month, day, hour, day_of_week, peak_hour = 2026, 10, 1, 18, 3, 1
+        peak_hour = 1
 
     # -------------------------------------------------------------------------
     # FEATURE SELECTION & SCALING

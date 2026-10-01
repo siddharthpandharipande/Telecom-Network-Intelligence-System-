@@ -31,6 +31,7 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
+    roc_auc_score,
     confusion_matrix,
     classification_report
 )
@@ -80,17 +81,13 @@ def train_nexusnet_svm():
 
     # Timestamp Decomposition
     df['Timestamp_dt'] = pd.to_datetime(df['Timestamp'], errors='coerce')
-    df['Year'] = df['Timestamp_dt'].dt.year
-    df['Month'] = df['Timestamp_dt'].dt.month
-    df['Day'] = df['Timestamp_dt'].dt.day
     df['Hour'] = df['Timestamp_dt'].dt.hour
-    df['Day_of_Week'] = df['Timestamp_dt'].dt.dayofweek
     df['Peak_Hour'] = np.where(df['Hour'].between(18, 22), 1, 0)
 
     print("      [+] Created: Network_Stress_Index")
     print("      [+] Created: Throughput_per_User")
     print("      [+] Created: Signal_Quality_Score")
-    print("      [+] Created: Peak_Hour & Time Features")
+    print("      [+] Created: Peak_Hour Flag")
 
     # -------------------------------------------------------------------------
     # STEP 3: PROTOTYPE TARGET CREATION (Network_Status)
@@ -183,6 +180,7 @@ def train_nexusnet_svm():
     prec = precision_score(y_test, y_pred)
     rec = recall_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred)
+    roc_auc = roc_auc_score(y_test, y_proba)
     cm = confusion_matrix(y_test, y_pred)
 
     print("\n" + "=" * 70)
@@ -192,6 +190,7 @@ def train_nexusnet_svm():
     print(f"  • Precision       : {prec * 100:.2f}%")
     print(f"  • Recall          : {rec * 100:.2f}%")
     print(f"  • F1-Score        : {f1 * 100:.2f}%")
+    print(f"  • ROC-AUC Score   : {roc_auc * 100:.2f}%")
     print("\nConfusion Matrix:")
     print(f"  [[ TN={cm[0][0]:<4}  FP={cm[0][1]:<4} ]")
     print(f"   [ FN={cm[1][0]:<4}  TP={cm[1][1]:<4} ]]")
