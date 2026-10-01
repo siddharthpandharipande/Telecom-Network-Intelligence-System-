@@ -97,7 +97,7 @@ export const CompanyDataInputPanel: React.FC = () => {
             Company Telecom Telemetry Ingestion Hub
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Submit network telemetry data once, then run AI analysis to propagate results to SVM, DBSCAN, Health & Live Map.
+            Submit network telemetry data once, then execute SVM Risk Prediction to evaluate node health and live map status.
           </p>
         </div>
 
@@ -126,7 +126,7 @@ export const CompanyDataInputPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* State Banner: Data Submitted Successfully & Prominent RUN AI ANALYSIS button */}
+      {/* State Banner: Data Submitted Successfully & Prominent EXECUTE SVM RISK PREDICTION button */}
       {(submittedState === 'submitted' || submittedState === 'analyzed') && (
         <div className="p-4 rounded-xl bg-cyan-950/40 border-2 border-cyan-500/60 text-cyan-300 text-xs font-mono font-bold flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in duration-300 shadow-noc-cyan">
           <div className="flex items-center gap-3">
@@ -134,7 +134,7 @@ export const CompanyDataInputPanel: React.FC = () => {
             <div>
               <div className="text-sm font-extrabold text-emerald-400 uppercase">DATA SUBMITTED SUCCESSFULLY!</div>
               <div className="text-xs text-slate-200 mt-0.5">
-                Record for <strong>{submittedCell?.assetType.toUpperCase()} {submittedCell?.id}</strong> saved. Ready for SVM + DBSCAN AI processing.
+                Record for <strong>{submittedCell?.assetType.toUpperCase()} {submittedCell?.id}</strong> saved. Ready for SVM Risk Classification.
               </div>
             </div>
           </div>
@@ -147,12 +147,12 @@ export const CompanyDataInputPanel: React.FC = () => {
             {analyzing ? (
               <>
                 <RefreshCw size={16} className="animate-spin" />
-                <span>PROCESSING SVM + DBSCAN...</span>
+                <span>EXECUTING SVM ANALYSIS...</span>
               </>
             ) : (
               <>
                 <Cpu size={16} />
-                <span>RUN AI ANALYSIS →</span>
+                <span>EXECUTE SVM RISK PREDICTION →</span>
               </>
             )}
           </button>

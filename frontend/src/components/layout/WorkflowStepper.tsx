@@ -10,7 +10,7 @@ export const WorkflowStepper: React.FC = () => {
 
   const steps = [
     { id: 1, label: 'Data Input', path: '/data-input', icon: <Database size={16} /> },
-    { id: 2, label: 'AI Analysis (SVM & DBSCAN)', path: '/svm', altPath: '/dbscan', icon: <Cpu size={16} /> },
+    { id: 2, label: 'SVM Risk Prediction', path: '/svm', altPath: '/dbscan', icon: <Cpu size={16} /> },
     { id: 3, label: 'Network Health', path: '/health', icon: <Activity size={16} /> },
     { id: 4, label: 'Live Network Map', path: '/map', icon: <MapPin size={16} /> },
   ];
@@ -28,7 +28,7 @@ export const WorkflowStepper: React.FC = () => {
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-slate-400 font-extrabold uppercase text-[11px]">
           <span className="text-cyan-400 animate-pulse">●</span>
-          <span>NOC PIPELINE PROGRESS:</span>
+          <span>TELECOM NOC PIPELINE:</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-1 justify-start md:justify-center">

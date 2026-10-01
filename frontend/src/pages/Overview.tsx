@@ -33,13 +33,13 @@ export const Overview: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs text-cyan-400 font-bold uppercase tracking-widest mb-1">
             <Radio size={16} />
-            <span>AI-POWERED TELECOM NOC OPERATIONS ENGINE</span>
+            <span>TELECOM NETWORK OPERATIONS CENTER (NOC)</span>
           </div>
           <h1 className="text-2xl font-extrabold text-slate-100 tracking-tight font-mono">
             Network Command Center
           </h1>
           <p className="text-xs text-slate-400 font-mono mt-0.5">
-            Ingest company telemetry → Execute SVM + DBSCAN AI Models → Monitor Network Health → Visualize Interactive Live Map
+            Ingest company telemetry → Execute SVM Risk Model → Monitor Network Health → Visualize Interactive Live Map
           </p>
         </div>
 

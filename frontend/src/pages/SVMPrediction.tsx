@@ -39,22 +39,22 @@ export const SVMPrediction: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs text-purple-400 font-bold uppercase tracking-widest mb-1">
             <Cpu size={16} />
-            <span>STEP 2: SUPERVISED AI RISK MODEL</span>
+            <span>STEP 2: SUPERVISED RISK CLASSIFIER</span>
           </div>
           <h1 className="text-2xl font-extrabold text-slate-100 tracking-tight flex items-center gap-3">
             <span>SVM Network Risk Prediction Results</span>
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Supervised Machine Learning classification evaluating company network telemetry data for service degradation risk
+            Support Vector Machine (SVM) binary classification evaluating company network telemetry data for service degradation risk
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate('/dbscan')}
+            onClick={() => navigate('/health')}
             className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs tracking-wider flex items-center gap-2 shadow-noc-purple transition-all"
           >
-            <span>NEXT: VIEW DBSCAN ANOMALY →</span>
+            <span>NEXT: VIEW NETWORK HEALTH →</span>
           </button>
         </div>
       </div>
@@ -71,7 +71,7 @@ export const SVMPrediction: React.FC = () => {
         </div>
         <div>
           <div className="text-slate-400 text-[10px]">MODEL ACCURACY</div>
-          <div className="text-sm font-bold text-emerald-400">94.7% F1-Score</div>
+          <div className="text-sm font-bold text-emerald-400">95.5% Accuracy</div>
         </div>
         <div>
           <div className="text-slate-400 text-[10px]">PROCESSED ASSET</div>

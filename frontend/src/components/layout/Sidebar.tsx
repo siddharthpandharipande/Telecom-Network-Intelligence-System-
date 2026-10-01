@@ -57,9 +57,9 @@ export const Sidebar: React.FC<{ collapsed: boolean; toggleCollapse: () => void 
       ]
     },
     {
-      title: 'AI INTELLIGENCE',
+      title: 'NETWORK ANALYTICS',
       items: [
-        { label: 'SVM Risk Prediction', path: '/svm', icon: <Cpu size={18} />, badge: '94.7%', badgeColor: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+        { label: 'SVM Risk Prediction', path: '/svm', icon: <Cpu size={18} />, badge: '95.5% Acc', badgeColor: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
         { label: 'DBSCAN Anomaly Detection', path: '/dbscan', icon: <ScatterChart size={18} />, badge: '14 Outliers', badgeColor: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
       ]
     },
