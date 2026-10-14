@@ -23,20 +23,60 @@
       "name": "Legacy5",
       "description": "Legacy 5-clause operational threshold policy",
       "clauses": [
-        {"metric": "Network_Stress_Index", "op": ">", "limit": 55.0, "message": "Network Stress Index exceeded 55%"},
-        {"metric": "Packet_Loss_pct", "op": ">", "limit": 4.5, "message": "Packet Loss exceeded 4.5%"},
-        {"metric": "Call_Drop_Rate_pct", "op": ">", "limit": 3.5, "message": "Call Drop Rate exceeded 3.5%"},
-        {"metric": "Latency_ms", "op": ">", "limit": 120.0, "message": "Latency exceeded 120 ms"},
-        {"metric": "Signal_Quality_Score", "op": "<", "limit": 20.0, "message": "Signal Quality Score dropped below 20"}
+        {
+          "metric": "Network_Stress_Index",
+          "op": ">",
+          "limit": 55.0,
+          "message": "Network Stress Index exceeded 55%"
+        },
+        {
+          "metric": "Packet_Loss_pct",
+          "op": ">",
+          "limit": 4.5,
+          "message": "Packet Loss exceeded 4.5%"
+        },
+        {
+          "metric": "Call_Drop_Rate_pct",
+          "op": ">",
+          "limit": 3.5,
+          "message": "Call Drop Rate exceeded 3.5%"
+        },
+        {
+          "metric": "Latency_ms",
+          "op": ">",
+          "limit": 120.0,
+          "message": "Latency exceeded 120 ms"
+        },
+        {
+          "metric": "Signal_Quality_Score",
+          "op": "<",
+          "limit": 20.0,
+          "message": "Signal Quality Score dropped below 20"
+        }
       ]
     },
     "QoS3": {
       "name": "QoS3",
       "description": "3-clause quality-of-service SLA degradation failure target",
       "clauses": [
-        {"metric": "Latency_ms", "op": ">", "limit": 120.0, "message": "Latency exceeded 120 ms SLA threshold"},
-        {"metric": "Packet_Loss_pct", "op": ">", "limit": 4.5, "message": "Packet Loss exceeded 4.5% SLA threshold"},
-        {"metric": "Call_Drop_Rate_pct", "op": ">", "limit": 3.5, "message": "Call Drop Rate exceeded 3.5% SLA threshold"}
+        {
+          "metric": "Latency_ms",
+          "op": ">",
+          "limit": 120.0,
+          "message": "Latency exceeded 120 ms SLA threshold"
+        },
+        {
+          "metric": "Packet_Loss_pct",
+          "op": ">",
+          "limit": 4.5,
+          "message": "Packet Loss exceeded 4.5% SLA threshold"
+        },
+        {
+          "metric": "Call_Drop_Rate_pct",
+          "op": ">",
+          "limit": 3.5,
+          "message": "Call Drop Rate exceeded 3.5% SLA threshold"
+        }
       ]
     }
   },
@@ -45,11 +85,36 @@
     "positive_class": "At Risk",
     "negative_class": "Normal",
     "clauses": [
-      {"metric": "Network_Stress_Index", "op": ">", "limit": 55.0, "message": "Network Stress Index exceeded 55%"},
-      {"metric": "Packet_Loss_pct", "op": ">", "limit": 4.5, "message": "Packet Loss exceeded 4.5%"},
-      {"metric": "Call_Drop_Rate_pct", "op": ">", "limit": 3.5, "message": "Call Drop Rate exceeded 3.5%"},
-      {"metric": "Latency_ms", "op": ">", "limit": 120.0, "message": "Latency exceeded 120 ms"},
-      {"metric": "Signal_Quality_Score", "op": "<", "limit": 20.0, "message": "Signal Quality Score dropped below 20"}
+      {
+        "metric": "Network_Stress_Index",
+        "op": ">",
+        "limit": 55.0,
+        "message": "Network Stress Index exceeded 55%"
+      },
+      {
+        "metric": "Packet_Loss_pct",
+        "op": ">",
+        "limit": 4.5,
+        "message": "Packet Loss exceeded 4.5%"
+      },
+      {
+        "metric": "Call_Drop_Rate_pct",
+        "op": ">",
+        "limit": 3.5,
+        "message": "Call Drop Rate exceeded 3.5%"
+      },
+      {
+        "metric": "Latency_ms",
+        "op": ">",
+        "limit": 120.0,
+        "message": "Latency exceeded 120 ms"
+      },
+      {
+        "metric": "Signal_Quality_Score",
+        "op": "<",
+        "limit": 20.0,
+        "message": "Signal Quality Score dropped below 20"
+      }
     ]
   },
   "svm_features": {
@@ -81,7 +146,8 @@
     "min_samples": 16
   },
   "decision": {
-    "shipped_variant": "unassigned",
-    "reason": "pending Phase 4 ablation"
+    "shipped_variant": "legacy_policy",
+    "reason": "Phase 3 ablation revealed (QoS3, F_cause) achieved CV ROC-AUC of 0.578 (below the >= 0.70 threshold for cause-side failure forecasting). Per decision rule, shipping variant 'legacy_policy' (label Legacy5, features F9_current). Risk score approximates a rule-defined SLA policy; metrics reflect that the label is a function of the inputs and must not be read as failure-prediction accuracy.",
+    "limitation_text": "Risk score approximates a rule-defined SLA policy; metrics reflect that the label is a function of the inputs and must not be read as failure-prediction accuracy."
   }
 }
