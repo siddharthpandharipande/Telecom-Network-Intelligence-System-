@@ -20,6 +20,8 @@ __pycache__/
 env/
 venv/
 *.pkl
+backend/data/*.db
+backend/data/
 
 
 # Editor directories and files
