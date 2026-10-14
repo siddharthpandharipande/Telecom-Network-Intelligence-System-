@@ -867,7 +867,7 @@ export const CompanyDataInputPanel: React.FC = () => {
                       : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30'
                   }`}
                 >
-                  {confirmedReport ? 'Import Confirmed (Live In Database)' : 'Dry-Run Preview (No DB Changes)'}
+                  {confirmedReport ? 'Import Confirmed (Saved in Database)' : 'Dry-Run Preview (No DB Changes)'}
                 </span>
               </div>
 

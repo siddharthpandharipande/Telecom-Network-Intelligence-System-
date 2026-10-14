@@ -106,7 +106,7 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
-      {/* Section 2: DBSCAN Hyperparameter Exploration (Live /api/dbscan/explore preview) */}
+      {/* Section 2: DBSCAN Hyperparameter Exploration (/api/dbscan/explore preview) */}
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -119,7 +119,7 @@ export const Settings: React.FC = () => {
         </div>
 
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Interactively test how changing clustering radius (eps) and density threshold (min_samples) affects noise outlier detection across all 6,000 dataset rows via the live <code>/api/dbscan/explore</code> endpoint.
+          Interactively test how changing clustering radius (eps) and density threshold (min_samples) affects noise outlier detection across all 6,000 dataset rows via the <code>/api/dbscan/explore</code> endpoint.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 text-xs">
@@ -172,7 +172,7 @@ export const Settings: React.FC = () => {
           </div>
         </div>
 
-        {/* Live Exploration Results Box */}
+        {/* Exploration Results Box */}
         {exploreResult && (
           <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             <div>

@@ -12,7 +12,7 @@ interface TopbarProps {
 export const Topbar: React.FC<TopbarProps> = ({ collapsed, toggleCollapse }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isLive, setIsLive, searchQuery, setSearchQuery, findCellById, setSelectedCell, alerts } = useTelemetry();
+  const { searchQuery, setSearchQuery, findCellById, setSelectedCell, alerts } = useTelemetry();
   const { theme, toggleTheme } = useTheme();
 
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
@@ -24,9 +24,11 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, toggleCollapse }) => 
       case '/svm':
       case '/dbscan': return 'AI Model Diagnostics';
       case '/health': return 'Network Health Metrics';
-      case '/map': return 'Live Network Map';
+      case '/map': return 'Network Map';
       case '/incidents': return 'Alerts & Incidents';
       case '/assets': return 'Network Assets';
+      case '/analytics': return 'Network Analytics';
+      case '/model': return 'Model Card';
       case '/settings': return 'Settings';
       default: return 'Overview';
     }
@@ -98,19 +100,14 @@ export const Topbar: React.FC<TopbarProps> = ({ collapsed, toggleCollapse }) => 
           <span>Ingest Data</span>
         </button>
 
-        {/* Live Telemetry Stream Indicator */}
-        <button
-          onClick={() => setIsLive(!isLive)}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-            isLive
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-              : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
-          }`}
-          title={isLive ? 'Pause Live Telemetry Stream' : 'Resume Live Telemetry Stream'}
+        {/* Dataset Snapshot Indicator */}
+        <div
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400"
+          title="Dataset Snapshot: 2026-09-16 (6,000 synthetic assets)"
         >
-          <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-          <span>{isLive ? 'Live Stream' : 'Paused'}</span>
-        </button>
+          <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+          <span>Snapshot (2026-09-16)</span>
+        </div>
 
         {/* Notification Bell */}
         <div className="relative">
