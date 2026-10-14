@@ -56,6 +56,18 @@ Otherwise, the asset is classified as **Normal (0)**.
 
 ---
 
+## 🚦 2.1 Network Asset Status Policy (Precedence Rules)
+Each telemetry reading in the backend database and map interface is resolved to a single operational status following strict precedence (first match wins):
+
+1. **`red` — At risk (SVM)**: `is_at_risk` is True (regardless of anomaly status).
+2. **`purple` — Anomaly only (DBSCAN)**: `is_anomaly` is True AND `not is_at_risk`.
+3. **`yellow` — Near threshold**: `not at risk`, `not anomaly`, but near-threshold: any label-clause metric from `config.json` at $\ge 80\%$ of its limit, OR $\text{Network Stress Index} > 45\%$, OR $\text{Signal Quality Score} < 35$.
+4. **`green` — Normal**: Everything else (clean operational condition).
+
+*Note*: `is_at_risk` and `is_anomaly` are always returned as separate boolean flags in API payloads so the frontend UI can display both badges simultaneously for compound-risk nodes.
+
+---
+
 ## 🚫 3. Feature Selection & Exclusion Strategy
 To prevent data leakage and overfitting, non-predictive identifiers and geographical coordinates are strictly **excluded** from the SVM feature vector:
 

@@ -21,19 +21,16 @@ def test_seed_works_and_is_idempotent(client: TestClient):
     assert data["db_readings"] == 6000
 
 
-def test_status_precedence_strict():
-    """Verify status calculation follows strict precedence: red > purple > yellow > green."""
-    # 1. Both at risk and anomaly -> RED
-    assert (
-        determine_status_single(
-            is_at_risk=True,
-            is_anomaly=True,
-            row={"Latency_ms": 130.0, "Network_Stress_Index": 60.0, "Signal_Quality_Score": 10.0},
-        )
-        == "red"
-    )
-
-    # 2. At risk only -> RED
+def test_status_precedence_strict(client: TestClient):
+    """Verify status calculation follows strict precedence:
+    1. red    = is_at_risk is true (regardless of anomaly)
+    2. purple = is_anomaly is true AND not at risk
+    3. yellow = not at risk, not anomaly, but near-threshold: any label-clause metric from
+                backend/ml/config.json at >= 80% of its limit, OR Network_Stress_Index > 45,
+                OR Signal_Quality_Score < 35
+    4. green  = everything else
+    """
+    # Case 1: At risk only -> RED
     assert (
         determine_status_single(
             is_at_risk=True,
@@ -43,7 +40,17 @@ def test_status_precedence_strict():
         == "red"
     )
 
-    # 3. Anomaly only (not at risk) -> PURPLE
+    # Case 2: Both at risk AND anomaly -> RED
+    assert (
+        determine_status_single(
+            is_at_risk=True,
+            is_anomaly=True,
+            row={"Latency_ms": 130.0, "Network_Stress_Index": 60.0, "Signal_Quality_Score": 10.0},
+        )
+        == "red"
+    )
+
+    # Case 3: Anomaly only (not at risk) -> PURPLE
     assert (
         determine_status_single(
             is_at_risk=False,
@@ -53,7 +60,7 @@ def test_status_precedence_strict():
         == "purple"
     )
 
-    # 4. Near threshold (not at risk, not anomaly) -> YELLOW
+    # Case 4: Near-threshold normal (not at risk, not anomaly) -> YELLOW
     # Latency 100 ms is >= 80% of 120 ms limit
     assert (
         determine_status_single(
@@ -63,8 +70,26 @@ def test_status_precedence_strict():
         )
         == "yellow"
     )
+    # Network_Stress_Index > 45
+    assert (
+        determine_status_single(
+            is_at_risk=False,
+            is_anomaly=False,
+            row={"Latency_ms": 50.0, "Network_Stress_Index": 48.0, "Signal_Quality_Score": 80.0},
+        )
+        == "yellow"
+    )
+    # Signal_Quality_Score < 35
+    assert (
+        determine_status_single(
+            is_at_risk=False,
+            is_anomaly=False,
+            row={"Latency_ms": 50.0, "Network_Stress_Index": 20.0, "Signal_Quality_Score": 30.0},
+        )
+        == "yellow"
+    )
 
-    # 5. Clean healthy operational -> GREEN
+    # Case 5: Clean normal operational -> GREEN
     assert (
         determine_status_single(
             is_at_risk=False,
@@ -73,6 +98,16 @@ def test_status_precedence_strict():
         )
         == "green"
     )
+
+    # Verify status legend from GET /api/config
+    resp = client.get("/api/config")
+    assert resp.status_code == 200
+    config_data = resp.json()
+    legend = {item["status"]: item["label"] for item in config_data["status_legend"]}
+    assert legend["red"] == "At risk (SVM)"
+    assert legend["purple"] == "Anomaly only (DBSCAN)"
+    assert legend["yellow"] == "Near threshold"
+    assert legend["green"] == "Normal"
 
 
 def test_csv_with_alias_headers(client: TestClient):

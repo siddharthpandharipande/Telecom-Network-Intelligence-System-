@@ -19,7 +19,7 @@ export const STATUS_COLORS: Record<
     border: 'border-red-500/30',
     badge: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-300 dark:border-red-800',
     hex: '#ef4444',
-    label: 'At Risk',
+    label: 'At risk (SVM)',
   },
   purple: {
     bg: 'bg-purple-500/10 dark:bg-purple-500/20',
@@ -27,7 +27,7 @@ export const STATUS_COLORS: Record<
     border: 'border-purple-500/30',
     badge: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border-purple-300 dark:border-purple-800',
     hex: '#a855f7',
-    label: 'Multivariate Anomaly',
+    label: 'Anomaly only (DBSCAN)',
   },
   yellow: {
     bg: 'bg-amber-500/10 dark:bg-amber-500/20',
@@ -35,7 +35,7 @@ export const STATUS_COLORS: Record<
     border: 'border-amber-500/30',
     badge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-300 dark:border-amber-800',
     hex: '#eab308',
-    label: 'Near-Threshold Warning',
+    label: 'Near threshold',
   },
   green: {
     bg: 'bg-emerald-500/10 dark:bg-emerald-500/20',
@@ -43,7 +43,7 @@ export const STATUS_COLORS: Record<
     border: 'border-emerald-500/30',
     badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
     hex: '#22c55e',
-    label: 'Healthy / Optimal',
+    label: 'Normal',
   },
 };
 
