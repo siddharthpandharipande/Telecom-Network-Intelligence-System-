@@ -1,0 +1,13 @@
+experiment,label,features,model,prevalence,acc_mean,acc_std,prec_mean,prec_std,rec_mean,rec_std,f1_mean,f1_std,roc_auc_mean,roc_auc_std,pr_auc_mean,pr_auc_std
+"Exp1: (Legacy5, F9_current)",Label_Legacy5,F9_current,SVM (RBF),0.465,0.9445,0.0036,0.9314,0.01,0.9509,0.0107,0.9409,0.0038,0.9899,0.0009,0.989,0.0014
+"Exp1: (Legacy5, F9_current)",Label_Legacy5,F9_current,Decision Tree (d=3),0.465,0.9885,0.0027,1.0,0.0,0.9753,0.0058,0.9875,0.003,0.9876,0.0029,0.9868,0.0031
+"Exp1: (Legacy5, F9_current)",Label_Legacy5,F9_current,Logistic Regression,0.465,0.801,0.0112,0.7977,0.0147,0.7667,0.0121,0.7818,0.0118,0.8922,0.011,0.8856,0.0106
+"Exp1: (Legacy5, F9_current)",Label_Legacy5,F9_current,Dummy (Stratified),0.465,0.5008,0.0107,0.464,0.0113,0.4731,0.0116,0.4685,0.0114,0.499,0.0108,0.4646,0.0054
+"Exp2: (QoS3, F_noderived)",Label_QoS3,F_noderived,SVM (RBF),0.3237,0.946,0.0041,0.8911,0.0135,0.9495,0.0101,0.9193,0.0055,0.9914,0.0008,0.9835,0.001
+"Exp2: (QoS3, F_noderived)",Label_QoS3,F_noderived,Decision Tree (d=3),0.3237,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0
+"Exp2: (QoS3, F_noderived)",Label_QoS3,F_noderived,Logistic Regression,0.3237,0.8617,0.0096,0.82,0.0155,0.7343,0.036,0.7742,0.0196,0.9297,0.0083,0.8851,0.0088
+"Exp2: (QoS3, F_noderived)",Label_QoS3,F_noderived,Dummy (Stratified),0.3237,0.5578,0.01,0.3182,0.0157,0.3203,0.0156,0.3192,0.0157,0.4959,0.0115,0.3221,0.0052
+"Exp3: (QoS3, F_cause)",Label_QoS3,F_cause,SVM (RBF),0.3237,0.6342,0.0165,0.4253,0.0241,0.362,0.0155,0.3905,0.0127,0.5778,0.0152,0.4672,0.0222
+"Exp3: (QoS3, F_cause)",Label_QoS3,F_cause,Decision Tree (d=3),0.3237,0.7223,0.0032,0.8301,0.0371,0.1797,0.0118,0.295,0.0146,0.5833,0.0231,0.4501,0.0143
+"Exp3: (QoS3, F_cause)",Label_QoS3,F_cause,Logistic Regression,0.3237,0.6867,0.0031,0.7906,0.0638,0.0448,0.0132,0.0843,0.024,0.5791,0.0173,0.461,0.0206
+"Exp3: (QoS3, F_cause)",Label_QoS3,F_cause,Dummy (Stratified),0.3237,0.5578,0.01,0.3182,0.0157,0.3203,0.0156,0.3192,0.0157,0.4959,0.0115,0.3221,0.0052
