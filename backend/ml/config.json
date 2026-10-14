@@ -1,0 +1,87 @@
+{
+  "version": "2.0.0",
+  "peak_hour": {
+    "start": 18,
+    "end": 22
+  },
+  "signal_quality": {
+    "min_dbm": -105.0,
+    "max_dbm": -55.0
+  },
+  "telemetry_columns": [
+    "Signal_Strength_dBm",
+    "Latency_ms",
+    "Packet_Loss_pct",
+    "Throughput_Mbps",
+    "Connected_Users",
+    "Traffic_Load_pct",
+    "Call_Drop_Rate_pct",
+    "Resource_Utilization_pct"
+  ],
+  "label_variants": {
+    "Legacy5": {
+      "name": "Legacy5",
+      "description": "Legacy 5-clause operational threshold policy",
+      "clauses": [
+        {"metric": "Network_Stress_Index", "op": ">", "limit": 55.0, "message": "Network Stress Index exceeded 55%"},
+        {"metric": "Packet_Loss_pct", "op": ">", "limit": 4.5, "message": "Packet Loss exceeded 4.5%"},
+        {"metric": "Call_Drop_Rate_pct", "op": ">", "limit": 3.5, "message": "Call Drop Rate exceeded 3.5%"},
+        {"metric": "Latency_ms", "op": ">", "limit": 120.0, "message": "Latency exceeded 120 ms"},
+        {"metric": "Signal_Quality_Score", "op": "<", "limit": 20.0, "message": "Signal Quality Score dropped below 20"}
+      ]
+    },
+    "QoS3": {
+      "name": "QoS3",
+      "description": "3-clause quality-of-service SLA degradation failure target",
+      "clauses": [
+        {"metric": "Latency_ms", "op": ">", "limit": 120.0, "message": "Latency exceeded 120 ms SLA threshold"},
+        {"metric": "Packet_Loss_pct", "op": ">", "limit": 4.5, "message": "Packet Loss exceeded 4.5% SLA threshold"},
+        {"metric": "Call_Drop_Rate_pct", "op": ">", "limit": 3.5, "message": "Call Drop Rate exceeded 3.5% SLA threshold"}
+      ]
+    }
+  },
+  "label": {
+    "name": "Legacy5",
+    "positive_class": "At Risk",
+    "negative_class": "Normal",
+    "clauses": [
+      {"metric": "Network_Stress_Index", "op": ">", "limit": 55.0, "message": "Network Stress Index exceeded 55%"},
+      {"metric": "Packet_Loss_pct", "op": ">", "limit": 4.5, "message": "Packet Loss exceeded 4.5%"},
+      {"metric": "Call_Drop_Rate_pct", "op": ">", "limit": 3.5, "message": "Call Drop Rate exceeded 3.5%"},
+      {"metric": "Latency_ms", "op": ">", "limit": 120.0, "message": "Latency exceeded 120 ms"},
+      {"metric": "Signal_Quality_Score", "op": "<", "limit": 20.0, "message": "Signal Quality Score dropped below 20"}
+    ]
+  },
+  "svm_features": {
+    "numeric": [
+      "Signal_Strength_dBm",
+      "Latency_ms",
+      "Packet_Loss_pct",
+      "Traffic_Load_pct",
+      "Call_Drop_Rate_pct",
+      "Resource_Utilization_pct",
+      "Network_Stress_Index",
+      "Signal_Quality_Score",
+      "Throughput_per_User"
+    ],
+    "categorical": []
+  },
+  "dbscan": {
+    "features": [
+      "Signal_Strength_dBm",
+      "Latency_ms",
+      "Packet_Loss_pct",
+      "Throughput_Mbps",
+      "Connected_Users",
+      "Traffic_Load_pct",
+      "Call_Drop_Rate_pct",
+      "Resource_Utilization_pct"
+    ],
+    "eps": 0.8,
+    "min_samples": 16
+  },
+  "decision": {
+    "shipped_variant": "unassigned",
+    "reason": "pending Phase 4 ablation"
+  }
+}
