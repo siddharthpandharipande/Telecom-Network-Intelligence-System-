@@ -1,48 +1,67 @@
-import React, { useState } from 'react';
-import { Settings as SettingsIcon, Sliders, Bell, User, Cpu, Radio, Save, Check, Sun, Moon, Palette } from 'lucide-react';
-import { useTelemetry } from '../context/TelemetryContext';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Settings as SettingsIcon,
+  Sliders,
+  User,
+  Cpu,
+  Radio,
+  Sun,
+  Moon,
+  Palette,
+  Activity,
+  Info,
+  RefreshCw,
+  Shield,
+  Layers,
+} from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useConfig } from '../api/hooks';
+import { getDbscanExplore } from '../api/client';
+import { DbscanExploreResponse } from '../types/api';
 
 export const Settings: React.FC = () => {
-  const { isLive, setIsLive } = useTelemetry();
   const { theme, setTheme } = useTheme();
-  const [saved, setSaved] = useState(false);
+  const { config } = useConfig();
 
-  // Settings State
-  const [telemetryFrequency, setTelemetryFrequency] = useState(3);
-  const [svmConfidence, setSvmConfidence] = useState(90);
-  const [dbscanEpsilon, setDbscanEpsilon] = useState(0.45);
+  // DBSCAN Exploration State (explore-only preview)
+  const [exploreEps, setExploreEps] = useState<number>(1.6);
+  const [exploreMinSamples, setExploreMinSamples] = useState<number>(16);
+  const [exploreResult, setExploreResult] = useState<DbscanExploreResponse | null>(null);
+  const [loadingExplore, setLoadingExplore] = useState<boolean>(false);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
+  const runExplore = useCallback(async (eps: number, minSamples: number) => {
+    setLoadingExplore(true);
+    try {
+      const res = await getDbscanExplore(eps, minSamples);
+      setExploreResult(res);
+    } catch (err: any) {
+      console.error('Failed to run DBSCAN explore:', err);
+    } finally {
+      setLoadingExplore(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    runExplore(exploreEps, exploreMinSamples);
+  }, [exploreEps, exploreMinSamples, runExplore]);
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
+    <div className="p-6 space-y-6 max-w-4xl font-sans">
       {/* Title */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-2.5">
             <SettingsIcon className="text-blue-600 dark:text-blue-400" size={26} />
-            <span>System Settings</span>
+            <span>Prototype Settings & Model Tuning</span>
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Configure theme mode, telemetry frequencies, AI model threshold parameters, and operator preferences.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Display preferences, deployed model hyperparameter specifications, and DBSCAN parameter space exploration.
           </p>
         </div>
-
-        <button
-          onClick={handleSave}
-          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors flex items-center gap-2 shadow-sm"
-        >
-          {saved ? <Check size={16} /> : <Save size={16} />}
-          <span>{saved ? 'Settings Saved' : 'Save Configuration'}</span>
-        </button>
       </div>
 
-      {/* Section 0: Theme Preference */}
-      <div className="p-6 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+      {/* Section 1: Theme Preference */}
+      <div className="p-6 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
           <Palette size={18} className="text-blue-600 dark:text-blue-400" />
           <span>Appearance & Theme Settings</span>
@@ -87,106 +106,143 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
-      {/* Section 1: Network Monitoring */}
-      <div className="p-6 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
-          <Radio size={18} className="text-blue-600 dark:text-blue-400" />
-          <span>Network Monitoring & Telemetry Configuration</span>
-        </h2>
-
-        <div className="space-y-4 text-xs">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Auto-Refresh Real-Time Telemetry Stream</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">Periodic telemetry background polling engine</div>
-            </div>
-            <button
-              onClick={() => setIsLive(!isLive)}
-              className={`w-12 h-6 rounded-full transition-colors p-1 flex items-center ${
-                isLive ? 'bg-blue-600 justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-full bg-white shadow"></span>
-            </button>
-          </div>
-
-          <div className="space-y-2 pt-2">
-            <div className="flex justify-between font-medium text-slate-800 dark:text-slate-200">
-              <span>Telemetry Polling Frequency ({telemetryFrequency}s)</span>
-            </div>
-            <input
-              type="range"
-              min={1}
-              max={10}
-              value={telemetryFrequency}
-              onChange={e => setTelemetryFrequency(Number(e.target.value))}
-              className="w-full accent-blue-600 bg-slate-200 dark:bg-slate-900"
-            />
-          </div>
+      {/* Section 2: DBSCAN Hyperparameter Exploration (Live /api/dbscan/explore preview) */}
+      <div className="p-6 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Sliders size={18} className="text-purple-600 dark:text-purple-400" />
+            <span>DBSCAN Sensitivity Explorer (Preview)</span>
+          </h2>
+          <span className="text-[11px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 font-medium">
+            Preview, does not change the deployed model
+          </span>
         </div>
-      </div>
 
-      {/* Section 2: AI Models Parameter Tuning */}
-      <div className="p-6 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
-          <Cpu size={18} className="text-purple-600 dark:text-purple-400" />
-          <span>AI Model Engine Parameter Tuning</span>
-        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Interactively test how changing clustering radius (eps) and density threshold (min_samples) affects noise outlier detection across all 6,000 dataset rows via the live <code>/api/dbscan/explore</code> endpoint.
+        </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-          <div className="space-y-3 p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-            <div className="font-semibold text-purple-700 dark:text-purple-300 text-sm">SVM Risk Model Classification Threshold</div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">Minimum confidence required for High Risk trigger: <span className="text-purple-600 dark:text-purple-300 font-bold">{svmConfidence}%</span></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 text-xs">
+          {/* Eps Slider */}
+          <div className="space-y-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                Epsilon Radius (eps): <span className="text-purple-600 dark:text-purple-400 font-mono text-sm">{exploreEps.toFixed(2)}</span>
+              </span>
+              <span className="text-[10px] text-slate-500">Shipped: 1.60</span>
+            </div>
             <input
               type="range"
-              min={70}
-              max={99}
-              value={svmConfidence}
-              onChange={e => setSvmConfidence(Number(e.target.value))}
-              className="w-full accent-purple-600 dark:accent-purple-500"
-            />
-          </div>
-
-          <div className="space-y-3 p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-            <div className="font-semibold text-indigo-700 dark:text-indigo-300 text-sm">DBSCAN Clustering Epsilon Parameter</div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">Maximum spatial cluster distance threshold: <span className="text-indigo-600 dark:text-indigo-300 font-bold">{dbscanEpsilon}</span></div>
-            <input
-              type="range"
-              min={0.1}
-              max={1.0}
+              min={0.5}
+              max={2.5}
               step={0.05}
-              value={dbscanEpsilon}
-              onChange={e => setDbscanEpsilon(Number(e.target.value))}
-              className="w-full accent-indigo-600 dark:accent-indigo-500"
+              value={exploreEps}
+              onChange={(e) => setExploreEps(parseFloat(e.target.value))}
+              className="w-full accent-purple-600 cursor-pointer"
             />
+            <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+              <span>0.50 (Dense / Strict)</span>
+              <span>1.60 (Shipped)</span>
+              <span>2.50 (Loose)</span>
+            </div>
+          </div>
+
+          {/* Min Samples Slider */}
+          <div className="space-y-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                Minimum Samples (min_samples): <span className="text-purple-600 dark:text-purple-400 font-mono text-sm">{exploreMinSamples}</span>
+              </span>
+              <span className="text-[10px] text-slate-500">Shipped: 16</span>
+            </div>
+            <input
+              type="range"
+              min={5}
+              max={30}
+              step={1}
+              value={exploreMinSamples}
+              onChange={(e) => setExploreMinSamples(parseInt(e.target.value))}
+              className="w-full accent-purple-600 cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+              <span>5 samples</span>
+              <span>16 (Shipped)</span>
+              <span>30 samples</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Exploration Results Box */}
+        {exploreResult && (
+          <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Tested Parameters</span>
+              <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                eps={exploreResult.eps}, min={exploreResult.min_samples}
+              </span>
+            </div>
+            <div>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Formed Clusters</span>
+              <span className="font-mono font-bold text-purple-600 dark:text-purple-400">
+                {exploreResult.n_clusters} clusters
+              </span>
+            </div>
+            <div>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Outlier / Noise Count</span>
+              <span className="font-mono font-bold text-red-500">
+                {exploreResult.noise_count} assets
+              </span>
+            </div>
+            <div>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Noise Percentage</span>
+              <span className="font-mono font-bold text-red-500">
+                {exploreResult.noise_pct.toFixed(2)}%
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Section 3: Deployed Model Parameters (Read-Only) */}
+      <div className="p-6 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
+          <Cpu size={18} className="text-blue-600 dark:text-blue-400" />
+          <span>Deployed Production Model Configuration (/api/config)</span>
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
+            <span className="font-semibold text-blue-600 dark:text-blue-400 block">SVM Classifier Specification</span>
+            <div className="space-y-1 text-slate-600 dark:text-slate-300 font-mono text-[11px]">
+              <div>Kernel: RBF (Radial Basis Function)</div>
+              <div>C: 10 &bull; Gamma: 0.10 &bull; class_weight: balanced</div>
+              <div>Numeric Features: {config?.svm_features?.numeric?.length || 9} dimensions</div>
+              <div>Label Policy: {config?.label?.name || 'Legacy5'}</div>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
+            <span className="font-semibold text-purple-600 dark:text-purple-400 block">DBSCAN Anomaly Detector Specification</span>
+            <div className="space-y-1 text-slate-600 dark:text-slate-300 font-mono text-[11px]">
+              <div>Epsilon (eps): {config?.dbscan?.eps || 1.6}</div>
+              <div>Min Samples: {config?.dbscan?.min_samples || 16}</div>
+              <div>Features: {config?.dbscan?.features?.length || 8} standardized dimensions</div>
+              <div>Distance Metric: Euclidean on StandardScaler features</div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Section 3: Operator Account Profile */}
-      <div className="p-6 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
-          <User size={18} className="text-blue-600 dark:text-blue-400" />
-          <span>Operator Credentials & Session</span>
-        </h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-          <div>
-            <label className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Operator Name</label>
-            <input type="text" readOnly value="NOC Administrator" className="w-full mt-1.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs" />
-          </div>
-          <div>
-            <label className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Role Level</label>
-            <input type="text" readOnly value="Senior Network Specialist" className="w-full mt-1.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-blue-600 dark:text-blue-400 font-semibold text-xs" />
-          </div>
-          <div>
-            <label className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider">Session Status</label>
-            <input type="text" readOnly value="Active Session" className="w-full mt-1.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-emerald-600 dark:text-emerald-400 font-semibold text-xs" />
-          </div>
+      {/* Section 4: Authentication & Security Note */}
+      <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 space-y-1.5">
+        <div className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-300">
+          <Shield size={16} className="text-blue-500" />
+          <span>Authentication Notice</span>
         </div>
+        <p>
+          No user authentication or session management is implemented in this academic college prototype. All NOC operator actions (acknowledgement, investigation, assignment, resolution) are executed in unauthenticated local operator mode against the FastAPI SQLite persistence backend.
+        </p>
       </div>
     </div>
   );
 };
-
-
