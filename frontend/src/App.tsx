@@ -5,6 +5,9 @@ import { ThemeProvider } from './context/ThemeContext';
 import { Sidebar } from './components/layout/Sidebar';
 import { Topbar } from './components/layout/Topbar';
 
+import { useApiStatus } from './api/hooks';
+import { OfflineBanner } from './components/common/OfflineBanner';
+
 // Pages
 import { Overview } from './pages/Overview';
 import { DataInput } from './pages/DataInput';
@@ -19,12 +22,16 @@ import { Settings } from './pages/Settings';
 
 export const App: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const { isOnline, checkHealth, isChecking } = useApiStatus();
 
   return (
     <ThemeProvider>
       <TelemetryProvider>
         <Router>
           <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col antialiased transition-colors duration-200">
+            {/* Global API Offline Banner */}
+            <OfflineBanner isOnline={isOnline} onRetry={checkHealth} isChecking={isChecking} />
+
             {/* Topbar Header */}
             <Topbar
               collapsed={sidebarCollapsed}
