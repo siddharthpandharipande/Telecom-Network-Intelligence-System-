@@ -33,46 +33,24 @@ export const NetworkHealth: React.FC = () => {
   const regions = ['All', 'Pune', 'Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Chennai', 'Ahmedabad', 'Kolkata'];
 
   return (
-    <div className="p-6 space-y-6 font-mono">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-100 tracking-tight flex items-center gap-3">
-            <Activity size={28} className="text-cyan-400" />
-            <span>Real-Time Network Health Dashboard</span>
+          <h1 className="text-2xl font-bold text-slate-100 tracking-tight flex items-center gap-2.5">
+            <Activity size={24} className="text-blue-400" />
+            <span>Network Health Metrics & Inventory</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Live telemetry health monitoring displaying all submitted company network data & operational metrics
+            Real-time telemetry health indicators across latency, packet loss, throughput, and capacity.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>TELEMETRY STREAM OPERATIONAL</span>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Telemetry Active ({lastTelemetryTime})</span>
           </div>
-
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0c1322] border border-[#1e2d4a] text-cyan-400 text-xs">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-            <span>● LIVE DATA</span>
-            <span className="text-slate-400 text-[10px] ml-1">({lastTelemetryTime})</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Pipeline Visualizer Strip */}
-      <div className="p-3 rounded-xl bg-[#080d19] border border-[#1e2d4a] flex flex-wrap items-center justify-between text-xs gap-2">
-        <span className="text-slate-400 font-bold">TELEMETRY PIPELINE STAGE:</span>
-        <div className="flex flex-wrap items-center gap-2 text-[11px]">
-          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400">1. Company Input</span>
-          <span>➔</span>
-          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400">2. AI Inference</span>
-          <span>➔</span>
-          <span className="px-2.5 py-1 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 font-bold">
-            3. Network Health Dashboard (ACTIVE)
-          </span>
-          <span>➔</span>
-          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400">4. Interactive Live Map</span>
         </div>
       </div>
 
@@ -130,7 +108,7 @@ export const NetworkHealth: React.FC = () => {
           trendDirection="up"
           status="healthy"
           sparklineData={[1.72, 1.76, 1.80, 1.82, 1.84]}
-          subtext="Active 5G / 4G Subscribers"
+          subtext="Active Subscribers"
           icon={<Users size={16} />}
         />
         <MetricCard
@@ -159,22 +137,22 @@ export const NetworkHealth: React.FC = () => {
           title="RESOURCE UTILIZATION"
           value="68"
           unit="%"
-          trend="Balanced CPU / Memory"
+          trend="Balanced Processing"
           trendDirection="neutral"
           status="healthy"
           sparklineData={[60, 62, 65, 66, 68]}
-          subtext="Baseband Processing Unit"
+          subtext="Processing Unit"
           icon={<Cpu size={16} />}
         />
       </div>
 
       {/* Complete Table of All Submitted Network Data */}
-      <div className="p-6 rounded-xl bg-[#0c1322] border border-[#1e2d4a] space-y-4">
+      <div className="p-6 rounded-xl bg-[#1e293b] border border-[#334155] shadow-sm space-y-4">
         {/* Table Controls */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+          <div>
             <h2 className="text-base font-bold text-slate-100">
-              SUBMITTED COMPANY TELEMETRY INVENTORY TABLE ({filteredCells.length})
+              Network Telemetry Node Inventory ({filteredCells.length} Nodes)
             </h2>
           </div>
 
@@ -186,8 +164,8 @@ export const NetworkHealth: React.FC = () => {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search cell ID, location..."
-                className="pl-8 pr-3 py-1.5 bg-[#080d19] border border-[#1e2d4a] rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-400"
+                placeholder="Filter by Node ID..."
+                className="pl-8 pr-3 py-1.5 bg-[#0f172a] border border-[#334155] rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500"
               />
             </div>
 
@@ -195,7 +173,7 @@ export const NetworkHealth: React.FC = () => {
             <select
               value={regionFilter}
               onChange={e => setRegionFilter(e.target.value)}
-              className="px-3 py-1.5 bg-[#080d19] border border-[#1e2d4a] rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-400"
+              className="px-3 py-1.5 bg-[#0f172a] border border-[#334155] rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500"
             >
               {regions.map(r => (
                 <option key={r} value={r}>Region: {r}</option>
@@ -206,76 +184,60 @@ export const NetworkHealth: React.FC = () => {
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 bg-[#080d19] border border-[#1e2d4a] rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-400"
+              className="px-3 py-1.5 bg-[#0f172a] border border-[#334155] rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500"
             >
               <option value="All">Status: All</option>
               <option value="healthy">Healthy</option>
               <option value="warning">Warning</option>
               <option value="critical">Critical</option>
             </select>
-
-            <button
-              onClick={() => setIsLive(!isLive)}
-              className={`p-1.5 rounded-lg border text-xs transition-colors ${
-                isLive ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40' : 'bg-[#080d19] text-slate-400 border-[#1e2d4a]'
-              }`}
-              title="Auto Refresh Telemetry"
-            >
-              <RefreshCw size={14} className={isLive ? 'animate-spin' : ''} />
-            </button>
           </div>
         </div>
 
-        {/* Data Table showing exact submitted company network fields */}
+        {/* Data Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-[#1e2d4a] text-slate-400 bg-[#080d19]">
-                <th className="p-3">CELL/TOWER ID</th>
-                <th className="p-3">ASSET TYPE</th>
-                <th className="p-3">LATITUDE</th>
-                <th className="p-3">LONGITUDE</th>
-                <th className="p-3">LATENCY</th>
-                <th className="p-3">PACKET LOSS</th>
-                <th className="p-3">TRAFFIC LOAD</th>
-                <th className="p-3">SIGNAL</th>
-                <th className="p-3">TIMESTAMP</th>
-                <th className="p-3">HEALTH STATUS</th>
-                <th className="p-3 text-right">ACTION</th>
+              <tr className="border-b border-[#334155] text-slate-400 bg-[#0f172a]">
+                <th className="p-3 font-semibold">Node ID</th>
+                <th className="p-3 font-semibold">Type</th>
+                <th className="p-3 font-semibold">Coordinates</th>
+                <th className="p-3 font-semibold">Latency</th>
+                <th className="p-3 font-semibold">Packet Loss</th>
+                <th className="p-3 font-semibold">Traffic Load</th>
+                <th className="p-3 font-semibold">Signal</th>
+                <th className="p-3 font-semibold">Status</th>
+                <th className="p-3 font-semibold text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1e2d4a]">
+            <tbody className="divide-y divide-[#334155]">
               {filteredCells.map(cell => (
                 <tr
                   key={cell.id}
-                  className={`hover:bg-[#111b30] transition-colors ${
-                    cell.isCompanyIngested ? 'bg-cyan-950/15' : ''
-                  }`}
+                  className="hover:bg-[#0f172a]/60 transition-colors"
                 >
                   <td className="p-3 font-bold text-slate-100">
                     <div className="flex items-center gap-2">
-                      <span className="text-cyan-400">{cell.id}</span>
+                      <span className="text-blue-400">{cell.id}</span>
                       {cell.isCompanyIngested && (
-                        <span className="px-1.5 py-0.5 text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded">
-                          INGESTED
+                        <span className="px-1.5 py-0.5 text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">
+                          Ingested
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="p-3 uppercase font-bold text-slate-300">{cell.assetType}</td>
-                  <td className="p-3 text-slate-300">{cell.lat.toFixed(4)}</td>
-                  <td className="p-3 text-slate-300">{cell.lng.toFixed(4)}</td>
-                  <td className={`p-3 font-bold ${cell.latency > 100 ? 'text-red-400' : cell.latency > 60 ? 'text-amber-400' : 'text-slate-200'}`}>
+                  <td className="p-3 uppercase font-medium text-slate-300">{cell.assetType}</td>
+                  <td className="p-3 text-slate-400 font-mono text-[11px]">{cell.lat.toFixed(4)}, {cell.lng.toFixed(4)}</td>
+                  <td className={`p-3 font-semibold ${cell.latency > 100 ? 'text-red-400' : cell.latency > 60 ? 'text-amber-400' : 'text-slate-200'}`}>
                     {cell.latency} ms
                   </td>
-                  <td className={`p-3 font-bold ${cell.packetLoss > 5 ? 'text-red-400' : cell.packetLoss > 2 ? 'text-amber-400' : 'text-slate-200'}`}>
+                  <td className={`p-3 font-semibold ${cell.packetLoss > 5 ? 'text-red-400' : cell.packetLoss > 2 ? 'text-amber-400' : 'text-slate-200'}`}>
                     {cell.packetLoss}%
                   </td>
-                  <td className={`p-3 font-bold ${cell.trafficLoad > 90 ? 'text-red-400' : cell.trafficLoad > 80 ? 'text-amber-400' : 'text-slate-200'}`}>
+                  <td className={`p-3 font-semibold ${cell.trafficLoad > 90 ? 'text-red-400' : cell.trafficLoad > 80 ? 'text-amber-400' : 'text-slate-200'}`}>
                     {cell.trafficLoad}%
                   </td>
                   <td className="p-3 text-slate-300">{cell.signalStrength} dBm</td>
-                  <td className="p-3 text-slate-400">{cell.timestamp || cell.lastUpdated}</td>
                   <td className="p-3">
                     <StatusBadge status={cell.status} size="sm" />
                   </td>
@@ -285,9 +247,9 @@ export const NetworkHealth: React.FC = () => {
                         setSelectedCell(cell);
                         navigate('/map');
                       }}
-                      className="px-2.5 py-1 rounded bg-[#1e2d4a] hover:bg-cyan-600 text-slate-200 hover:text-black font-bold text-[11px] transition-colors"
+                      className="px-2.5 py-1 rounded bg-[#0f172a] hover:bg-blue-600 text-slate-300 hover:text-white font-medium text-[11px] transition-colors border border-[#334155]"
                     >
-                      MAP LOCATE
+                      Locate on Map
                     </button>
                   </td>
                 </tr>
@@ -299,3 +261,4 @@ export const NetworkHealth: React.FC = () => {
     </div>
   );
 };
+

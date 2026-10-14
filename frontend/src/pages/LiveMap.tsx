@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
-  Search, Filter, Layers, Radio, ShieldAlert, Cpu, ScatterChart, RefreshCw, X, ArrowRight, Zap, MapPin, Database
+  Search, Filter, MapPin, X, ArrowRight, Brain, Activity, ShieldAlert
 } from 'lucide-react';
 import { useTelemetry } from '../context/TelemetryContext';
 import { StatusBadge } from '../components/common/StatusBadge';
-import { NetworkCell, AssetType, AssetStatus } from '../types/telecom';
+import { AssetType, AssetStatus } from '../types/telecom';
 
 // Helper component to center map smoothly
 const MapController: React.FC<{ center: [number, number]; zoom: number }> = ({ center, zoom }) => {
@@ -18,22 +18,14 @@ const MapController: React.FC<{ center: [number, number]; zoom: number }> = ({ c
   return null;
 };
 
-// Custom SVG Leaflet DivIcon with 4 AI Status Colors: 🟢 Healthy | 🟡 Warning | 🔴 At Risk | 🟣 Anomaly
+// Custom SVG Leaflet DivIcon with 4 Status Colors: 🟢 Healthy | 🟡 Warning | 🔴 At Risk | 🟣 Anomaly
 const createCustomMarkerIcon = (type: AssetType, status: AssetStatus, isSelected: boolean) => {
   let bgColor = '#10b981'; // 🟢 Healthy Green
-  let glowClass = '';
+  if (status === 'warning') bgColor = '#f59e0b'; // 🟡 Warning Amber
+  else if (status === 'critical') bgColor = '#ef4444'; // 🔴 At Risk Red
+  else if (status === 'anomaly') bgColor = '#a855f7'; // 🟣 AI Anomaly Purple
 
-  if (status === 'warning') {
-    bgColor = '#f59e0b'; // 🟡 Warning Amber
-  } else if (status === 'critical') {
-    bgColor = '#ef4444'; // 🔴 At Risk Red
-    glowClass = 'animate-ping';
-  } else if (status === 'anomaly') {
-    bgColor = '#a855f7'; // 🟣 AI Anomaly Purple
-    glowClass = 'animate-pulse';
-  }
-
-  let symbol = '◉';
+  let symbol = '●';
   if (type === 'tower') symbol = '📡';
   else if (type === 'basestation') symbol = '▣';
   else if (type === 'router') symbol = '◇';
@@ -41,51 +33,40 @@ const createCustomMarkerIcon = (type: AssetType, status: AssetStatus, isSelected
   const html = `
     <div style="
       position: relative;
-      width: ${isSelected ? '38px' : '30px'};
-      height: ${isSelected ? '38px' : '30px'};
+      width: ${isSelected ? '36px' : '28px'};
+      height: ${isSelected ? '36px' : '28px'};
       border-radius: 50%;
-      background: #0c1322;
-      border: 2.5px solid ${bgColor};
-      box-shadow: 0 0 ${isSelected ? '20px' : '10px'} ${bgColor};
+      background: #1e293b;
+      border: 2px solid ${bgColor};
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: ${isSelected ? '16px' : '13px'};
+      font-size: ${isSelected ? '15px' : '12px'};
       color: ${bgColor};
       cursor: pointer;
     ">
       ${symbol}
-      ${(status === 'critical' || status === 'anomaly') ? `<span style="position:absolute; width:100%; height:100%; border-radius:50%; border:2px solid ${bgColor}; opacity:0.6;" class="${glowClass}"></span>` : ''}
     </div>
   `;
 
   return L.divIcon({
     html,
-    className: 'custom-noc-marker',
-    iconSize: [isSelected ? 38 : 30, isSelected ? 38 : 30],
-    iconAnchor: [isSelected ? 19 : 15, isSelected ? 19 : 15]
+    className: 'custom-map-marker',
+    iconSize: [isSelected ? 36 : 28, isSelected ? 36 : 28],
+    iconAnchor: [isSelected ? 18 : 14, isSelected ? 18 : 14]
   });
 };
 
 export const LiveMap: React.FC = () => {
   const navigate = useNavigate();
-  const { cells, assets, links, selectedCell, setSelectedCell, isLive, createIncident } = useTelemetry();
+  const { cells, links, selectedCell, setSelectedCell, createIncident } = useTelemetry();
 
   const [mapCenter, setMapCenter] = useState<[number, number]>([18.5204, 73.8567]); // Default Pune
   const [mapZoom, setMapZoom] = useState<number>(10);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [searchQuery, setSearchQueryLocal] = useState<string>('');
   const [drawerOpen, setDrawerOpen] = useState<boolean>(true);
-
-  // Layer Visibility Toggles
-  const [layers, setLayers] = useState({
-    cells: true,
-    towers: true,
-    baseStations: true,
-    routers: true,
-    links: true,
-    anomalies: true
-  });
 
   useEffect(() => {
     if (selectedCell) {
@@ -130,52 +111,52 @@ export const LiveMap: React.FC = () => {
   const anomalyCount = cells.filter(c => c.status === 'anomaly' || c.dbscanClassification === 'Anomaly').length;
 
   return (
-    <div className="relative w-full h-[calc(100vh-4rem)] bg-[#060911] overflow-hidden flex flex-col font-mono">
-      {/* Pipeline Flow Status Banner */}
-      <div className="bg-[#080d19] border-b border-[#1e2d4a] px-4 py-2 text-xs flex flex-wrap items-center justify-between z-20">
-        <div className="flex items-center gap-2 text-[#00f0ff] font-bold">
-          <MapPin size={16} />
-          <span>LIVE INTERACTIVE NETWORK MAP — PLOTTED FROM COMPANY TELEMETRY</span>
+    <div className="relative w-full h-[calc(100vh-4rem)] bg-[#0f172a] overflow-hidden flex flex-col">
+      {/* Top Status & Filter Header */}
+      <div className="bg-[#1e293b] border-b border-[#334155] px-5 py-2.5 text-xs flex flex-wrap items-center justify-between z-20">
+        <div className="flex items-center gap-2 text-slate-100 font-semibold">
+          <MapPin size={16} className="text-blue-400" />
+          <span>Interactive Telecom Network Map</span>
         </div>
-        <div className="flex items-center gap-3 text-[11px]">
-          <span className="text-slate-400">STATUS LEGEND:</span>
-          <span className="text-emerald-400 font-bold">🟢 Healthy</span>
-          <span className="text-amber-400 font-bold">🟡 Warning</span>
-          <span className="text-red-400 font-bold">🔴 At Risk (SVM)</span>
-          <span className="text-purple-400 font-bold">🟣 Anomaly (DBSCAN)</span>
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-slate-400">Legend:</span>
+          <span className="text-emerald-400 font-medium">🟢 Healthy</span>
+          <span className="text-amber-400 font-medium">🟡 Warning</span>
+          <span className="text-red-400 font-medium">🔴 At Risk (SVM)</span>
+          <span className="text-purple-400 font-medium">🟣 Anomaly (DBSCAN)</span>
         </div>
       </div>
 
-      {/* Top Map Controls Bar */}
-      <div className="absolute top-12 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+      {/* Floating Control Toolbar */}
+      <div className="absolute top-14 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
         {/* Search Field */}
-        <form onSubmit={handleSearchSubmit} className="pointer-events-auto relative w-72 md:w-96 shadow-2xl">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400" />
+        <form onSubmit={handleSearchSubmit} className="pointer-events-auto relative w-72 md:w-80 shadow-lg">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQueryLocal(e.target.value)}
-            placeholder="Search Cell/Tower ID or location..."
-            className="w-full pl-9 pr-24 py-2 bg-[#0c1322]/90 backdrop-blur-md border border-[#1e2d4a] focus:border-cyan-400 rounded-lg text-xs text-slate-100 placeholder-slate-400 focus:outline-none shadow-noc-card"
+            placeholder="Search Node ID, city, or tower..."
+            className="w-full pl-9 pr-20 py-2 bg-[#1e293b]/95 backdrop-blur-md border border-[#334155] focus:border-blue-500 rounded-lg text-xs text-slate-100 placeholder-slate-400 focus:outline-none shadow-md"
           />
-          <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold text-[10px] rounded transition-colors">
-            SEARCH
+          <button type="submit" className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-[11px] rounded transition-colors">
+            Search
           </button>
         </form>
 
-        {/* Status Filters & Map Reset */}
-        <div className="pointer-events-auto flex flex-wrap items-center gap-2 bg-[#0c1322]/95 backdrop-blur-md p-1.5 rounded-lg border border-[#1e2d4a] shadow-2xl">
+        {/* Status Filters */}
+        <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 bg-[#1e293b]/95 backdrop-blur-md p-1.5 rounded-lg border border-[#334155] shadow-lg text-xs">
           {(['All', 'Healthy', 'Warning', 'At Risk', 'Anomaly'] as const).map(f => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
-              className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${
+              className={`px-3 py-1 rounded-md font-medium transition-all ${
                 statusFilter === f
                   ? f === 'At Risk'
-                    ? 'bg-red-500/20 text-red-400 border border-red-500/40'
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30 font-semibold'
                     : f === 'Anomaly'
-                    ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40'
-                    : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
+                    ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30 font-semibold'
+                    : 'bg-blue-600 text-white font-semibold'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -188,9 +169,9 @@ export const LiveMap: React.FC = () => {
               setMapCenter([18.5204, 73.8567]);
               setMapZoom(10);
             }}
-            className="px-2.5 py-1 bg-[#1e2d4a] hover:bg-cyan-600 text-slate-200 hover:text-black text-xs rounded transition-colors"
+            className="px-2.5 py-1 bg-[#0f172a] hover:bg-slate-700 text-slate-300 text-xs rounded border border-[#334155] transition-colors ml-1"
           >
-            RESET MAP
+            Reset
           </button>
         </div>
       </div>
@@ -205,27 +186,26 @@ export const LiveMap: React.FC = () => {
         >
           <MapController center={mapCenter} zoom={mapZoom} />
 
-          {/* Dark NOC Tile Layer */}
+          {/* Dark Map Tiles */}
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
           {/* Render Network Links */}
-          {layers.links && links.map(link => (
+          {links.map(link => (
             <Polyline
               key={link.id}
               positions={[link.fromCoords, link.toCoords]}
               pathOptions={{
-                color: link.status === 'critical' ? '#ef4444' : link.status === 'warning' ? '#f59e0b' : '#00f0ff',
+                color: link.status === 'critical' ? '#ef4444' : link.status === 'warning' ? '#f59e0b' : '#3b82f6',
                 weight: link.status === 'critical' ? 3 : 2,
-                dashArray: link.status === 'critical' ? '6, 6' : undefined,
-                opacity: 0.8
+                opacity: 0.7
               }}
             />
           ))}
 
-          {/* Render All Assets Plotted by exact Latitude / Longitude & identified by Cell/Tower ID */}
+          {/* Render All Filtered Assets */}
           {filteredCells.map(cell => (
             <Marker
               key={cell.id}
@@ -239,12 +219,12 @@ export const LiveMap: React.FC = () => {
               }}
             >
               <Popup>
-                <div className="font-mono text-xs space-y-1 p-1">
-                  <div className="font-bold text-cyan-400">{cell.id} ({cell.assetType.toUpperCase()})</div>
-                  <div className="text-slate-300">Lat/Lng: {cell.lat.toFixed(4)}, {cell.lng.toFixed(4)}</div>
-                  <div className="text-slate-300">Latency: <span className="text-red-400 font-bold">{cell.latency} ms</span></div>
-                  <div className="text-slate-300">SVM Risk: <span className="text-purple-400 font-bold">{cell.svmRiskCategory}</span></div>
-                  <div className="text-slate-300">DBSCAN: <span className="text-indigo-400 font-bold">{cell.dbscanClassification}</span></div>
+                <div className="text-xs space-y-1 p-0.5">
+                  <div className="font-bold text-blue-400">{cell.id} ({cell.assetType})</div>
+                  <div className="text-slate-300 font-mono text-[11px]">{cell.lat.toFixed(4)}, {cell.lng.toFixed(4)}</div>
+                  <div className="text-slate-300">Latency: <strong className="text-red-400">{cell.latency} ms</strong></div>
+                  <div className="text-slate-300">SVM Risk: <strong className="text-indigo-400">{cell.svmRiskCategory}</strong></div>
+                  <div className="text-slate-300">DBSCAN: <strong className="text-purple-400">{cell.dbscanClassification}</strong></div>
                 </div>
               </Popup>
             </Marker>
@@ -252,154 +232,130 @@ export const LiveMap: React.FC = () => {
         </MapContainer>
       </div>
 
-      {/* Floating Live Status Overlay */}
-      <div className="absolute bottom-6 left-6 z-20 p-4 rounded-xl bg-[#0c1322]/95 backdrop-blur-md border border-[#1e2d4a] shadow-2xl text-xs space-y-2.5 max-w-xs">
-        <div className="flex items-center justify-between border-b border-[#1e2d4a] pb-2">
-          <span className="font-bold text-slate-200 uppercase tracking-wider">LIVE NETWORK AI MAP STATUS</span>
-          <span className="flex items-center gap-1 text-cyan-400 text-[10px] font-bold">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-            LIVE
-          </span>
+      {/* Floating Status Summary Box */}
+      <div className="absolute bottom-6 left-6 z-20 p-4 rounded-xl bg-[#1e293b]/95 backdrop-blur-md border border-[#334155] shadow-xl text-xs space-y-2.5 max-w-xs">
+        <div className="flex items-center justify-between border-b border-[#334155] pb-2">
+          <span className="font-bold text-slate-200">Network Map Status</span>
+          <span className="text-xs text-emerald-400 font-medium">Stream Active</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-[11px]">
-          <div className="p-2 rounded bg-emerald-950/20 border border-emerald-500/30 text-emerald-400 font-bold">
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium">
             🟢 Healthy: {healthyCount}
           </div>
-          <div className="p-2 rounded bg-amber-950/20 border border-amber-500/30 text-amber-400 font-bold">
+          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 font-medium">
             🟡 Warning: {warningCount}
           </div>
-          <div className="p-2 rounded bg-red-950/20 border border-red-500/30 text-red-400 font-bold">
+          <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 font-medium">
             🔴 At Risk: {atRiskCount}
           </div>
-          <div className="p-2 rounded bg-purple-950/20 border border-purple-500/30 text-purple-400 font-bold">
+          <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 font-medium">
             🟣 Anomaly: {anomalyCount}
           </div>
         </div>
       </div>
 
-      {/* CLICKED MARKER CELL/TOWER DETAILS DRAWER (FULL TELEMETRY + SVM + DBSCAN RESULTS) */}
+      {/* Slide-out Node Detail Drawer */}
       {selectedCell && drawerOpen && (
-        <div className="absolute top-12 right-4 bottom-6 z-30 w-80 md:w-96 bg-[#0c1322]/95 backdrop-blur-xl border border-[#1e2d4a] rounded-xl shadow-2xl p-6 overflow-y-auto space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="absolute top-14 right-4 bottom-6 z-30 w-80 md:w-96 bg-[#1e293b]/95 backdrop-blur-xl border border-[#334155] rounded-xl shadow-2xl p-5 overflow-y-auto space-y-5">
           {/* Drawer Header */}
-          <div className="flex items-start justify-between border-b border-[#1e2d4a] pb-4">
+          <div className="flex items-start justify-between border-b border-[#334155] pb-3.5">
             <div>
-              <div className="text-xs text-cyan-400 font-bold tracking-widest uppercase">ASSET TELEMETRY & AI DETAILS</div>
-              <h2 className="text-xl font-extrabold text-slate-100 mt-1">{selectedCell.id}</h2>
-              <p className="text-xs text-slate-400">Type: <strong className="text-cyan-300 uppercase">{selectedCell.assetType}</strong> | Location: {selectedCell.region}</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">Coords: <strong className="text-slate-200">{selectedCell.lat.toFixed(4)}, {selectedCell.lng.toFixed(4)}</strong></p>
+              <div className="text-[11px] text-blue-400 font-semibold">Node Telemetry & Diagnostics</div>
+              <h2 className="text-lg font-bold text-slate-100 mt-0.5">{selectedCell.id}</h2>
+              <p className="text-xs text-slate-400">{selectedCell.name} ({selectedCell.region})</p>
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5">Coords: {selectedCell.lat.toFixed(4)}, {selectedCell.lng.toFixed(4)}</p>
             </div>
             <div className="flex items-center gap-2">
               <StatusBadge status={selectedCell.status} size="md" />
               <button
                 onClick={() => setDrawerOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-100 rounded"
+                className="p-1 text-slate-400 hover:text-slate-100 rounded-lg hover:bg-slate-700 transition-colors"
               >
                 <X size={18} />
               </button>
             </div>
           </div>
 
-          {/* Network Metrics Grid */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">COMPANY TELEMETRY VALUES</h3>
+          {/* Telemetry Metrics */}
+          <div className="space-y-2.5">
+            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Telemetry Parameters</h3>
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 rounded bg-[#080d19] border border-[#1e2d4a]">
-                <div className="text-[10px] text-slate-400">LATENCY</div>
-                <div className={`text-base font-extrabold ${selectedCell.latency > 100 ? 'text-red-400' : 'text-slate-100'}`}>
+              <div className="p-2.5 rounded-lg bg-[#0f172a] border border-[#334155]">
+                <div className="text-[11px] text-slate-400">Latency</div>
+                <div className={`text-sm font-bold ${selectedCell.latency > 100 ? 'text-red-400' : 'text-slate-100'}`}>
                   {selectedCell.latency} ms
                 </div>
               </div>
-              <div className="p-2.5 rounded bg-[#080d19] border border-[#1e2d4a]">
-                <div className="text-[10px] text-slate-400">PACKET LOSS</div>
-                <div className={`text-base font-extrabold ${selectedCell.packetLoss > 5 ? 'text-red-400' : 'text-slate-100'}`}>
+              <div className="p-2.5 rounded-lg bg-[#0f172a] border border-[#334155]">
+                <div className="text-[11px] text-slate-400">Packet Loss</div>
+                <div className={`text-sm font-bold ${selectedCell.packetLoss > 5 ? 'text-red-400' : 'text-slate-100'}`}>
                   {selectedCell.packetLoss}%
                 </div>
               </div>
-              <div className="p-2.5 rounded bg-[#080d19] border border-[#1e2d4a]">
-                <div className="text-[10px] text-slate-400">TRAFFIC LOAD</div>
-                <div className={`text-base font-extrabold ${selectedCell.trafficLoad > 90 ? 'text-red-400' : 'text-slate-100'}`}>
+              <div className="p-2.5 rounded-lg bg-[#0f172a] border border-[#334155]">
+                <div className="text-[11px] text-slate-400">Traffic Load</div>
+                <div className={`text-sm font-bold ${selectedCell.trafficLoad > 90 ? 'text-red-400' : 'text-slate-100'}`}>
                   {selectedCell.trafficLoad}%
                 </div>
               </div>
-              <div className="p-2.5 rounded bg-[#080d19] border border-[#1e2d4a]">
-                <div className="text-[10px] text-slate-400">THROUGHPUT</div>
-                <div className="text-base font-extrabold text-cyan-400">{selectedCell.throughput} Mbps</div>
+              <div className="p-2.5 rounded-lg bg-[#0f172a] border border-[#334155]">
+                <div className="text-[11px] text-slate-400">Throughput</div>
+                <div className="text-sm font-bold text-blue-400">{selectedCell.throughput} Mbps</div>
               </div>
-              <div className="p-2.5 rounded bg-[#080d19] border border-[#1e2d4a]">
-                <div className="text-[10px] text-slate-400">CONNECTED USERS</div>
-                <div className="text-base font-extrabold text-slate-100">{selectedCell.users.toLocaleString()}</div>
+              <div className="p-2.5 rounded-lg bg-[#0f172a] border border-[#334155]">
+                <div className="text-[11px] text-slate-400">Users</div>
+                <div className="text-sm font-bold text-slate-100">{selectedCell.users.toLocaleString()}</div>
               </div>
-              <div className="p-2.5 rounded bg-[#080d19] border border-[#1e2d4a]">
-                <div className="text-[10px] text-slate-400">SIGNAL STRENGTH</div>
-                <div className="text-base font-extrabold text-slate-100">{selectedCell.signalStrength} dBm</div>
-              </div>
-              <div className="p-2.5 rounded bg-[#080d19] border border-[#1e2d4a]">
-                <div className="text-[10px] text-slate-400">CALL DROP RATE</div>
-                <div className="text-base font-extrabold text-slate-100">{selectedCell.callDropRate}%</div>
-              </div>
-              <div className="p-2.5 rounded bg-[#080d19] border border-[#1e2d4a]">
-                <div className="text-[10px] text-slate-400">RESOURCE UTIL</div>
-                <div className="text-base font-extrabold text-slate-100">{selectedCell.resourceUtil}%</div>
+              <div className="p-2.5 rounded-lg bg-[#0f172a] border border-[#334155]">
+                <div className="text-[11px] text-slate-400">Signal Strength</div>
+                <div className="text-sm font-bold text-slate-100">{selectedCell.signalStrength} dBm</div>
               </div>
             </div>
-            {selectedCell.timestamp && (
-              <div className="text-[10px] text-slate-400 pt-1">
-                Telemetry Timestamp: <span className="text-slate-200">{selectedCell.timestamp}</span>
-              </div>
-            )}
           </div>
 
-          {/* AI Intelligence Section */}
-          <div className="space-y-3 pt-3 border-t border-[#1e2d4a]">
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-              <Cpu size={16} className="text-purple-400" />
-              <span>AI MODEL INFERENCE RESULTS</span>
+          {/* AI Inference Summary */}
+          <div className="space-y-2.5 pt-2 border-t border-[#334155]">
+            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Brain size={15} className="text-indigo-400" />
+              <span>AI Diagnostics Summary</span>
             </h3>
 
-            {/* SVM Box */}
-            <div className="p-3 rounded-lg bg-purple-950/20 border border-purple-500/40 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-300">SVM RISK PREDICTION</span>
+            {/* SVM Card */}
+            <div className="p-3 rounded-lg bg-[#0f172a] border border-[#334155] space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-200">SVM Risk Prediction</span>
                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  selectedCell.svmRiskCategory === 'At Risk' ? 'bg-red-500/30 text-red-300' : 'bg-emerald-500/30 text-emerald-300'
+                  selectedCell.svmRiskCategory === 'At Risk' ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'
                 }`}>
-                  {selectedCell.svmRiskCategory.toUpperCase()}
+                  {selectedCell.svmRiskCategory}
                 </span>
               </div>
-              <div className="text-sm font-extrabold text-purple-400">Risk Score: {selectedCell.svmRiskScore}%</div>
-              <div className="text-[10px] text-slate-300">Main Driver: {selectedCell.svmMainFactor}</div>
+              <div className="text-sm font-bold text-indigo-400">Risk Score: {selectedCell.svmRiskScore}%</div>
+              <div className="text-[11px] text-slate-400">Main Factor: {selectedCell.svmMainFactor}</div>
             </div>
 
-            {/* DBSCAN Box */}
-            <div className="p-3 rounded-lg bg-indigo-950/20 border border-indigo-500/40 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-indigo-300">DBSCAN ANOMALY DETECTION</span>
+            {/* DBSCAN Card */}
+            <div className="p-3 rounded-lg bg-[#0f172a] border border-[#334155] space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-200">DBSCAN Anomaly Detection</span>
                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  selectedCell.dbscanClassification === 'Anomaly' ? 'bg-purple-500/30 text-purple-300' : 'bg-emerald-500/30 text-emerald-300'
+                  selectedCell.dbscanClassification === 'Anomaly' ? 'bg-purple-500/20 text-purple-400' : 'bg-emerald-500/20 text-emerald-400'
                 }`}>
-                  {selectedCell.dbscanClassification.toUpperCase()}
+                  {selectedCell.dbscanClassification}
                 </span>
               </div>
-              <div className="text-sm font-extrabold text-indigo-400">Anomaly Score: {selectedCell.dbscanAnomalyScore}</div>
-              <div className="text-[10px] text-slate-300">Density Outlier Classification</div>
+              <div className="text-sm font-bold text-purple-400">Anomaly Score: {selectedCell.dbscanAnomalyScore}</div>
             </div>
           </div>
 
           {/* Operational Action Buttons */}
-          <div className="space-y-2 pt-3 border-t border-[#1e2d4a]">
+          <div className="space-y-2 pt-2 border-t border-[#334155]">
             <button
               onClick={() => navigate('/svm')}
-              className="w-full py-2 px-3 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-white font-bold text-xs transition-colors flex items-center justify-between"
+              className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors flex items-center justify-between"
             >
-              <span>VIEW SVM PREDICTION PAGE</span>
-              <ArrowRight size={14} />
-            </button>
-            <button
-              onClick={() => navigate('/dbscan')}
-              className="w-full py-2 px-3 rounded-lg bg-indigo-600/80 hover:bg-indigo-500 text-white font-bold text-xs transition-colors flex items-center justify-between"
-            >
-              <span>VIEW DBSCAN ANALYSIS PAGE</span>
+              <span>View SVM Diagnostics Page</span>
               <ArrowRight size={14} />
             </button>
             <button
@@ -407,10 +363,10 @@ export const LiveMap: React.FC = () => {
                 createIncident(selectedCell.id);
                 navigate('/incidents');
               }}
-              className="w-full py-2.5 px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-noc-red transition-all flex items-center justify-center gap-2"
+              className="w-full py-2 px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 shadow-sm"
             >
-              <ShieldAlert size={16} />
-              <span>CREATE INCIDENT</span>
+              <ShieldAlert size={15} />
+              <span>Create Action Incident</span>
             </button>
           </div>
         </div>
@@ -418,3 +374,4 @@ export const LiveMap: React.FC = () => {
     </div>
   );
 };
+
