@@ -142,7 +142,7 @@
       "Call_Drop_Rate_pct",
       "Resource_Utilization_pct"
     ],
-    "eps": 0.8,
+    "eps": 1.6,
     "min_samples": 16
   },
   "decision": {
