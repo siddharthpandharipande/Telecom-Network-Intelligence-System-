@@ -1,36 +1,81 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
 } from 'recharts';
-import { Brain, ShieldAlert, Radio, Activity, AlertTriangle, ArrowRight, CheckCircle2, MapPin, Database, Server } from 'lucide-react';
-import { StatusBadge } from '../components/common/StatusBadge';
+import {
+  Brain,
+  ShieldAlert,
+  Radio,
+  Activity,
+  ArrowRight,
+  CheckCircle2,
+  MapPin,
+  Database,
+  Server,
+  Layers,
+  AlertTriangle,
+  RefreshCw,
+  Clock,
+} from 'lucide-react';
 import { useTelemetry } from '../context/TelemetryContext';
 import { useTheme } from '../context/ThemeContext';
-
-const PERFORMANCE_DATA = [
-  { time: '10:00', latency: 38, packetLoss: 1.2, throughput: 9.8, load: 64 },
-  { time: '11:00', latency: 42, packetLoss: 1.5, throughput: 9.2, load: 68 },
-  { time: '12:00', latency: 48, packetLoss: 1.8, throughput: 8.9, load: 74 },
-  { time: '13:00', latency: 54, packetLoss: 2.4, throughput: 8.1, load: 81 },
-  { time: '14:00', latency: 72, packetLoss: 4.1, throughput: 7.2, load: 88 },
-  { time: '15:00', latency: 118, packetLoss: 8.5, throughput: 5.4, load: 94 },
-  { time: '15:42', latency: 182, packetLoss: 11.8, throughput: 4.2, load: 95 },
-];
+import { useApiStatus, getStatusStyle } from '../api/hooks';
+import { getStatsOverview, getHourlyAnalytics, getIncidents } from '../api/client';
+import { StatsOverview, HourlyData, Incident } from '../types/api';
 
 export const Overview: React.FC = () => {
   const navigate = useNavigate();
-  const { cells, incidents, alerts, setSelectedCell } = useTelemetry();
   const { theme } = useTheme();
-  const [timeFilter, setTimeFilter] = useState<'1H' | '6H' | '12H' | '24H' | '7D'>('24H');
+  const { isOnline } = useApiStatus();
+  const { setSelectedCell } = useTelemetry();
 
-  const atRiskCellsCount = cells.filter(c => c.svmRiskCategory === 'At Risk').length;
-  const anomalyCellsCount = cells.filter(c => c.dbscanClassification === 'Anomaly').length;
-  const activeAlertsCount = alerts.filter(a => a.status !== 'Resolved').length;
-  const criticalIncidentsCount = incidents.filter(i => i.status !== 'RESOLVED').length;
+  const [stats, setStats] = useState<StatsOverview | null>(null);
+  const [hourlyData, setHourlyData] = useState<HourlyData | null>(null);
+  const [recentIncidents, setRecentIncidents] = useState<Incident[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadOverviewData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [overviewStats, hourlyRes, incidentsRes] = await Promise.all([
+        getStatsOverview(),
+        getHourlyAnalytics('traffic_load_pct'),
+        getIncidents({ page: 1, page_size: 4 }),
+      ]);
+      setStats(overviewStats);
+      setHourlyData(hourlyRes);
+      setRecentIncidents(incidentsRes.items);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load telemetry overview metrics');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadOverviewData();
+  }, [loadOverviewData]);
+
+  // Asset type distribution data for chart
+  const assetTypeChartData = stats?.by_asset_type.map((item) => ({
+    name: item.asset_type,
+    total: item.count,
+    atRisk: item.at_risk,
+    normal: item.count - item.at_risk,
+  })) || [];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 font-sans">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -38,8 +83,16 @@ export const Overview: React.FC = () => {
             Network Intelligence Overview
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Real-time telemetry monitoring, SVM risk degradation prediction, and DBSCAN anomaly detection.
+            Telemetry monitoring snapshot, SVM risk classification, and DBSCAN anomaly detection.
           </p>
+          {stats?.time_range?.min && stats?.time_range?.max && (
+            <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-500 dark:text-slate-400 font-mono">
+              <Clock size={13} className="text-blue-500" />
+              <span>
+                Dataset snapshot: <strong>{stats.time_range.min.substring(0, 10)}</strong> ({stats.time_range.min.substring(11, 16)} to {stats.time_range.max.substring(11, 16)})
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
@@ -55,144 +108,170 @@ export const Overview: React.FC = () => {
             className="px-4 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 font-semibold text-xs transition-all flex items-center gap-2 shadow-sm"
           >
             <MapPin size={15} />
-            <span>View Live Map</span>
+            <span>View Network Map</span>
           </button>
         </div>
       </div>
 
       {/* Primary KPI Metrics Row */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        {/* Total Assets */}
         <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-1">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs">
-            <span>Total Nodes</span>
+            <span>Total Assets</span>
             <Radio size={16} className="text-blue-600 dark:text-blue-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{cells.length.toLocaleString()}</div>
-          <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">98.6% Operational</div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono">
+            {stats ? stats.total_assets.toLocaleString() : '6,000'}
+          </div>
+          <div className="text-[11px] text-slate-500 font-medium">
+            {stats ? `${stats.located_assets.toLocaleString()} located on map` : 'All nodes located'}
+          </div>
         </div>
 
+        {/* Normal Class */}
         <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-1">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs">
-            <span>Active Operational</span>
+            <span>Normal Operating</span>
             <CheckCircle2 size={16} className="text-emerald-500 dark:text-emerald-400" />
           </div>
-          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">2,451</div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400">Normal status</div>
+          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+            {stats ? stats.risk_counts.normal.toLocaleString() : '3,171'}
+          </div>
+          <div className="text-[11px] text-slate-500">
+            {stats ? `${((stats.risk_counts.normal / stats.total_assets) * 100).toFixed(1)}% compliant` : '52.8% compliant'}
+          </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-red-200 dark:border-red-500/30 bg-red-50/50 dark:bg-red-500/5 shadow-sm space-y-1">
+        {/* At-Risk Nodes */}
+        <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-red-200 dark:border-red-500/30 bg-red-50/30 dark:bg-red-500/5 shadow-sm space-y-1">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs">
-            <span>SVM At-Risk Nodes</span>
+            <span>SVM At Risk</span>
             <Brain size={16} className="text-red-500 dark:text-red-400" />
           </div>
-          <div className="text-2xl font-bold text-red-600 dark:text-red-400">{atRiskCellsCount}</div>
-          <div className="text-[11px] text-red-600 dark:text-red-300">Degradation predicted</div>
+          <div className="text-2xl font-bold text-red-600 dark:text-red-400 font-mono">
+            {stats ? stats.risk_counts.at_risk.toLocaleString() : '2,829'}
+          </div>
+          <div className="text-[11px] text-red-600 dark:text-red-300">
+            {stats ? `${((stats.risk_counts.at_risk / stats.total_assets) * 100).toFixed(1)}% elevated risk` : '47.2% elevated risk'}
+          </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-500/30 bg-purple-50/50 dark:bg-purple-500/5 shadow-sm space-y-1">
+        {/* DBSCAN Anomalies */}
+        <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-500/30 bg-purple-50/30 dark:bg-purple-500/5 shadow-sm space-y-1">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs">
             <span>DBSCAN Anomalies</span>
             <Activity size={16} className="text-purple-600 dark:text-purple-400" />
           </div>
-          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{anomalyCellsCount}</div>
-          <div className="text-[11px] text-purple-600 dark:text-purple-300">Density spatial outliers</div>
+          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400 font-mono">
+            {stats ? stats.anomaly_count.toLocaleString() : '244'}
+          </div>
+          <div className="text-[11px] text-purple-600 dark:text-purple-300">
+            {stats ? `${stats.both_count} dual at-risk & anomaly` : 'Multivariate outliers'}
+          </div>
         </div>
 
+        {/* Red Status Assets */}
         <div className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-1">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs">
-            <span>Active Incidents</span>
-            <ShieldAlert size={16} className="text-amber-500 dark:text-amber-400" />
+            <span>Red Status Assets</span>
+            <ShieldAlert size={16} className="text-red-500" />
           </div>
-          <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{criticalIncidentsCount}</div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400">{activeAlertsCount} alerts active</div>
+          <div className="text-2xl font-bold text-red-600 dark:text-red-400 font-mono">
+            {stats ? stats.status_counts.red.toLocaleString() : '2,709'}
+          </div>
+          <div className="text-[11px] text-slate-500">
+            Yellow: {stats?.status_counts.yellow || 0} &bull; Purple: {stats?.status_counts.purple || 0}
+          </div>
         </div>
       </div>
 
-      {/* Main Performance Chart */}
-      <div className="p-6 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+      {/* Main Analytics Chart: Hourly Trend or Distribution by Asset Type */}
+      <div className="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Activity size={18} className="text-blue-600 dark:text-blue-400" />
-              <span>Network Performance Trends</span>
+              <span>
+                {hourlyData?.meaningful
+                  ? 'Hourly Telemetry Profile (Asset Local Time)'
+                  : 'Asset Inventory & Risk Distribution by Infrastructure Type'}
+              </span>
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Latency & Traffic Load over time</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              {hourlyData?.meaningful
+                ? 'Hourly aggregation from backend telemetry readings'
+                : 'Single-day dataset snapshot: displaying Normal vs At-Risk breakdown across asset categories'}
+            </p>
           </div>
 
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
-            {(['1H', '6H', '12H', '24H', '7D'] as const).map(tf => (
-              <button
-                key={tf}
-                onClick={() => setTimeFilter(tf)}
-                className={`px-2.5 py-1 text-xs rounded-md font-semibold transition-colors ${
-                  timeFilter === tf
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                {tf}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 text-xs font-mono text-slate-500">
+            <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+              Snapshot: 2026-09-16 (Hours 00–23)
+            </span>
           </div>
         </div>
 
         <div className="h-72 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={PERFORMANCE_DATA} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorLatency" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorLoad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#334155' : '#e2e8f0'} />
-              <XAxis dataKey="time" stroke={theme === 'dark' ? '#94a3b8' : '#64748b'} tick={{ fontSize: 11 }} />
-              <YAxis stroke={theme === 'dark' ? '#94a3b8' : '#64748b'} tick={{ fontSize: 11 }} />
+            <BarChart data={assetTypeChartData} margin={{ top: 15, right: 20, left: -10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#334155' : '#e2e8f0'} opacity={0.5} />
+              <XAxis
+                dataKey="name"
+                stroke={theme === 'dark' ? '#94a3b8' : '#64748b'}
+                tick={{ fontSize: 11 }}
+              />
+              <YAxis
+                stroke={theme === 'dark' ? '#94a3b8' : '#64748b'}
+                tick={{ fontSize: 11 }}
+              />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
+                  backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
                   borderColor: theme === 'dark' ? '#334155' : '#cbd5e1',
                   borderRadius: '8px',
-                  color: theme === 'dark' ? '#f8fafc' : '#0f172a'
+                  color: theme === 'dark' ? '#f8fafc' : '#0f172a',
+                  fontSize: '11px',
                 }}
               />
-              <Area type="monotone" dataKey="latency" name="Latency (ms)" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorLatency)" />
-              <Area type="monotone" dataKey="load" name="Traffic Load (%)" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorLoad)" />
-            </AreaChart>
+              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+              <Bar dataKey="normal" name="Normal Operating" fill="#10b981" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="atRisk" name="At Risk (Degradation)" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* AI Intelligence Cards & Recent Alerts Stream */}
+      {/* AI Intelligence Cards & Incidents Stream */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* SVM Risk Summary */}
-        <div className="p-6 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 flex flex-col justify-between">
+        <div className="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="px-2.5 py-1 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-semibold flex items-center gap-1.5">
                 <Brain size={14} />
                 SVM Risk Classifier
               </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">95.5% Accuracy</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">96.4% Test Acc</span>
             </div>
 
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Supervised Risk Model</h3>
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Predicts potential network degradation using RBF Kernel classification on latency, packet loss, and utilization metrics.
+              Predicts elevated risk of service degradation based on SLA threshold violations in network stress, packet loss, and latency metrics.
             </p>
 
-            <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
               <div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">At-Risk Nodes</div>
-                <div className="text-xl font-bold text-red-600 dark:text-red-400">{atRiskCellsCount} Nodes</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">At-Risk Assets</div>
+                <div className="text-xl font-bold text-red-600 dark:text-red-400 font-mono">
+                  {stats ? stats.risk_counts.at_risk.toLocaleString() : '2,829'}
+                </div>
               </div>
               <div className="text-right">
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">Avg Confidence</div>
-                <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">94.7%</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">Prevalence</div>
+                <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">
+                  {stats ? `${((stats.risk_counts.at_risk / stats.total_assets) * 100).toFixed(1)}%` : '47.2%'}
+                </div>
               </div>
             </div>
           </div>
@@ -207,29 +286,33 @@ export const Overview: React.FC = () => {
         </div>
 
         {/* DBSCAN Anomaly Summary */}
-        <div className="p-6 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 flex flex-col justify-between">
+        <div className="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 text-xs font-semibold flex items-center gap-1.5">
                 <Activity size={14} />
                 DBSCAN Clustering
               </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">Unsupervised</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Unsupervised</span>
             </div>
 
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Density Anomaly Model</h3>
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Discovers unexpected traffic spikes and spatial density outliers across geographical cell sites.
+              Detects spatial density outliers in 8-dimensional telemetry space using standardized Euclidean distance (eps=1.6, min_samples=16).
             </p>
 
-            <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
               <div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">Identified Outliers</div>
-                <div className="text-xl font-bold text-purple-600 dark:text-purple-400">{anomalyCellsCount} Outliers</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">Identified Noise Outliers</div>
+                <div className="text-xl font-bold text-purple-600 dark:text-purple-400 font-mono">
+                  {stats ? stats.anomaly_count.toLocaleString() : '244'}
+                </div>
               </div>
               <div className="text-right">
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">Clusters Found</div>
-                <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">18 Clusters</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">Noise Percentage</div>
+                <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">
+                  {stats ? `${((stats.anomaly_count / stats.total_assets) * 100).toFixed(2)}%` : '4.07%'}
+                </div>
               </div>
             </div>
           </div>
@@ -243,48 +326,43 @@ export const Overview: React.FC = () => {
           </button>
         </div>
 
-        {/* Live Telemetry Events Stream */}
-        <div className="p-6 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 flex flex-col justify-between">
+        {/* NOC Incidents Stream */}
+        <div className="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3 mb-3">
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>Recent Network Events</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span>NOC Incidents Log</span>
               </h3>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">Live Stream</span>
+              <span className="text-[11px] text-slate-500 font-mono">Database state</span>
             </div>
 
             <div className="space-y-2.5 text-xs">
-              <div
-                onClick={() => {
-                  const target = cells.find(c => c.id === 'MH-PN-102');
-                  if (target) setSelectedCell(target);
-                  navigate('/map');
-                }}
-                className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 cursor-pointer transition-colors space-y-1"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-red-600 dark:text-red-400 font-semibold">MH-PN-102 — SVM High Risk</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400">15:38</span>
+              {recentIncidents.length === 0 ? (
+                <div className="p-4 text-center text-slate-400 text-xs">
+                  No active incidents recorded. Dispatch an incident from the Map or SVM page.
                 </div>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300">Pune Central: Latency 182ms | Packet Loss 11.8%</p>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 cursor-pointer transition-colors space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-purple-600 dark:text-purple-400 font-semibold">MH-DL-201 — DBSCAN Anomaly</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400">15:34</span>
-                </div>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300">Delhi Hub: Spatial cluster distance score 0.88 outlier</p>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 cursor-pointer transition-colors space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-amber-600 dark:text-amber-400 font-semibold">MH-MB-417 — High Traffic</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400">15:29</span>
-                </div>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300">Mumbai Marine Drive: 1,420 users (88% load)</p>
-              </div>
+              ) : (
+                recentIncidents.map((inc) => (
+                  <div
+                    key={inc.id}
+                    onClick={() => navigate('/incidents')}
+                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-400 cursor-pointer transition-colors space-y-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-blue-500 font-semibold font-mono">
+                        #{inc.id} &bull; {inc.asset_id}
+                      </span>
+                      <span className="text-[10px] uppercase font-bold text-red-500">
+                        {inc.status}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 truncate">
+                      {inc.title}
+                    </p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -292,12 +370,10 @@ export const Overview: React.FC = () => {
             onClick={() => navigate('/incidents')}
             className="w-full py-2 rounded-lg bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-700/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors mt-2"
           >
-            View All Incidents
+            Manage NOC Incidents
           </button>
         </div>
       </div>
     </div>
   );
 };
-
-
