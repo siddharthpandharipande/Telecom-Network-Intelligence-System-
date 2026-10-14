@@ -1,7 +1,7 @@
 """SQLAlchemy 2.x database models for NEXUSNET."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy import (
@@ -16,6 +16,11 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+def utc_now() -> datetime:
+    """Return current naive UTC datetime."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Base(DeclarativeBase):
@@ -34,8 +39,8 @@ class Asset(Base):
     latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     latest_reading_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     readings: Mapped[List["Reading"]] = relationship(
@@ -91,7 +96,7 @@ class Reading(Base):
     ingestion_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("ingestion_log.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     # Constraints & Relationships
     __table_args__ = (
@@ -120,8 +125,8 @@ class Incident(Base):
     )  # 'open'|'acknowledged'|'assigned'|'investigating'|'resolved'|'escalated'
     assignee: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="auto")  # 'auto' | 'manual'
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     asset: Mapped["Asset"] = relationship("Asset", back_populates="incidents")
@@ -141,7 +146,7 @@ class IncidentEvent(Base):
     incident_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="system")
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -155,7 +160,7 @@ class IngestionLog(Base):
     __tablename__ = "ingestion_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[str] = mapped_column(String(32), nullable=False)  # 'seed' | 'csv' | 'manual'
     rows_total: Mapped[int] = mapped_column(Integer, nullable=False)

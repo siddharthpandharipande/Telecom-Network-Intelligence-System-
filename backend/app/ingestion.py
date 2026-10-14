@@ -18,7 +18,7 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.models import Asset, Incident, IncidentEvent, IngestionLog, Reading
+from backend.app.models import Asset, Incident, IncidentEvent, IngestionLog, Reading, utc_now
 from backend.app.status_policy import compute_status_vectorized, determine_status_single
 from backend.ml.features import engineer_features
 from backend.ml.inference import (
@@ -461,7 +461,7 @@ def process_ingestion(
     db.flush()
 
     updated_count = 0
-    now = datetime.utcnow()
+    now = utc_now()
 
     # Pre-fetch existing assets and existing readings in batch
     asset_ids_in_batch = list(valid_df["Asset_ID"].unique())

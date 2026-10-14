@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.db import get_db
-from backend.app.models import Incident, IncidentEvent
+from backend.app.models import Incident, IncidentEvent, utc_now
 from backend.app.schemas import (
     IncidentActionRequest,
     IncidentResponse,
@@ -144,7 +144,7 @@ def apply_incident_action(
             },
         )
 
-    now = datetime.utcnow()
+    now = utc_now()
     incident.status = target_status
     if payload.assignee:
         incident.assignee = payload.assignee

@@ -23,7 +23,7 @@ from backend.app.ingestion import (
     parse_csv_to_dataframe,
     process_ingestion,
 )
-from backend.app.models import Asset, Incident, IncidentEvent, IngestionLog, Reading
+from backend.app.models import Asset, Incident, IncidentEvent, IngestionLog, Reading, utc_now
 from backend.app.settings import settings
 
 
@@ -84,7 +84,7 @@ def seed_database(session: Optional[Session] = None, force_reseed: bool = False)
             .limit(limit)
         ).all()
 
-        now = datetime.utcnow()
+        now = utc_now()
         incidents_created = 0
 
         # Check existing incidents
