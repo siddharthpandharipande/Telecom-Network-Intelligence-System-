@@ -16,7 +16,7 @@ export const DataInput: React.FC = () => {
             Company Network Data Ingestion Hub
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Input company telemetry data via manual entry or bulk CSV upload to power SVM Risk Prediction, DBSCAN Anomaly Detection, Network Health, and the Live Interactive Map.
+            Input telemetry data via manual entry or bulk CSV upload to power SVM Risk Prediction, DBSCAN Anomaly Detection, Network Health, and the Interactive Network Map.
           </p>
         </div>
 

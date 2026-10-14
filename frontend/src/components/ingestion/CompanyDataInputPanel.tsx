@@ -1,106 +1,239 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Database, CheckCircle2, FileSpreadsheet, ArrowRight, Brain, RefreshCw, Zap, ShieldAlert, Check } from 'lucide-react';
+import {
+  Upload,
+  Database,
+  CheckCircle2,
+  FileSpreadsheet,
+  AlertTriangle,
+  XCircle,
+  Eye,
+  Save,
+  Download,
+  MapPin,
+  RefreshCw,
+  Sliders,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+  ShieldAlert,
+} from 'lucide-react';
+import { predictRecord, ingestCsv, getAssets } from '../../api/client';
 import { useTelemetry } from '../../context/TelemetryContext';
-import { TelemetryFormInput, AssetType } from '../../types/telecom';
+import { Reading, IngestionReport, PaginatedAssets } from '../../types/api';
+import { getStatusStyle, useApiStatus } from '../../api/hooks';
 
 export const CompanyDataInputPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { submitCompanyData, runAiAnalysis, submittedCell, submittedState, cells, setSelectedCell } = useTelemetry();
+  const { refreshData } = useTelemetry();
+  const { isOnline } = useApiStatus();
 
   const [activeTab, setActiveTab] = useState<'manual' | 'csv'>('manual');
-  const [analyzing, setAnalyzing] = useState<boolean>(false);
 
-  // Manual Form State with exact 13 requested telemetry parameters
-  const [formData, setFormData] = useState<TelemetryFormInput>({
-    cellId: 'MH-PN-999',
-    assetType: 'cell',
+  // ---------------------------------------------------------
+  // Manual Form State
+  // ---------------------------------------------------------
+  const [formData, setFormData] = useState({
+    asset_id: 'MH-PN-999',
+    asset_type: 'Cell Tower',
+    city: 'Pune',
+    country: 'India',
+    region: 'Maharashtra',
     latitude: 18.5204,
     longitude: 73.8567,
-    location: 'Pune',
-    signalStrength: -104,
-    latency: 182,
-    packetLoss: 11.8,
-    throughput: 4.2,
-    connectedUsers: 1820,
-    trafficLoad: 95,
-    callDropRate: 6.2,
-    resourceUtil: 96,
-    timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    signal_strength_dbm: -104,
+    latency_ms: 182,
+    packet_loss_pct: 11.8,
+    throughput_mbps: 4.2,
+    connected_users: 1820,
+    traffic_load_pct: 95,
+    call_drop_rate_pct: 6.2,
+    resource_utilization_pct: 96,
+    timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
   });
 
-  const [csvFileName, setCsvFileName] = useState<string | null>(null);
-  const [uploading, setUploading] = useState<boolean>(false);
+  const [manualImpute, setManualImpute] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [manualErrors, setManualErrors] = useState<string[]>([]);
+  const [manualWarnings, setManualWarnings] = useState<string[]>([]);
+  const [previewResult, setPreviewResult] = useState<Reading | null>(null);
+  const [persistSuccess, setPersistSuccess] = useState<boolean>(false);
 
-  const handleInputChange = (field: keyof TelemetryFormInput, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  // ---------------------------------------------------------
+  // CSV Ingestion State
+  // ---------------------------------------------------------
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvImpute, setCsvImpute] = useState<boolean>(true);
+  const [isDryRunning, setIsDryRunning] = useState<boolean>(false);
+  const [isConfirming, setIsConfirming] = useState<boolean>(false);
+  const [dryRunReport, setDryRunReport] = useState<IngestionReport | null>(null);
+  const [confirmedReport, setConfirmedReport] = useState<IngestionReport | null>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
+
+  // ---------------------------------------------------------
+  // Inventory Table State
+  // ---------------------------------------------------------
+  const [inventorySource, setInventorySource] = useState<string>('manual');
+  const [inventoryPage, setInventoryPage] = useState<number>(1);
+  const [inventoryLoading, setInventoryLoading] = useState<boolean>(false);
+  const [inventoryData, setInventoryData] = useState<PaginatedAssets | null>(null);
+
+  const loadInventory = useCallback(async () => {
+    setInventoryLoading(true);
+    try {
+      const params: { source?: string; page: number; page_size: number } = {
+        page: inventoryPage,
+        page_size: 10,
+      };
+      if (inventorySource !== 'all') {
+        params.source = inventorySource;
+      }
+      const data = await getAssets(params);
+      setInventoryData(data);
+    } catch (err: any) {
+      console.error('Failed to load inventory assets:', err);
+    } finally {
+      setInventoryLoading(false);
+    }
+  }, [inventorySource, inventoryPage]);
+
+  useEffect(() => {
+    loadInventory();
+  }, [loadInventory]);
+
+  // Demo presets
+  const applyPreset = (preset: typeof formData) => {
+    setFormData(preset);
+    setManualErrors([]);
+    setManualWarnings([]);
+    setPreviewResult(null);
+    setPersistSuccess(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    submitCompanyData(formData);
+  const handleInputChange = (field: string, value: any) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleTriggerAiAnalysis = () => {
-    setAnalyzing(true);
-    setTimeout(() => {
-      setAnalyzing(false);
-      runAiAnalysis();
-      navigate('/svm');
-    }, 600);
-  };
+  // Submit manual form (preview or persist)
+  const handleManualAction = async (persist: boolean) => {
+    if (!isOnline) return;
+    setIsSubmitting(true);
+    setManualErrors([]);
+    setManualWarnings([]);
+    setPersistSuccess(false);
 
-  const handleCsvUploadSim = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setCsvFileName(file.name);
-      setUploading(true);
-      setTimeout(() => {
-        setUploading(false);
-        submitCompanyData({
-          cellId: 'MH-MB-888',
-          assetType: 'tower',
-          latitude: 19.0760,
-          longitude: 72.8777,
-          location: 'Mumbai',
-          signalStrength: -102,
-          latency: 168,
-          packetLoss: 10.2,
-          throughput: 3.8,
-          connectedUsers: 1940,
-          trafficLoad: 96,
-          callDropRate: 6.1,
-          resourceUtil: 97,
-          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
-        });
-      }, 800);
+    try {
+      const payload = {
+        asset_id: formData.asset_id.trim(),
+        asset_type: formData.asset_type,
+        city: formData.city.trim() || undefined,
+        country: formData.country.trim() || undefined,
+        region: formData.region.trim() || undefined,
+        latitude: Number(formData.latitude),
+        longitude: Number(formData.longitude),
+        signal_strength_dbm: Number(formData.signal_strength_dbm),
+        latency_ms: Number(formData.latency_ms),
+        packet_loss_pct: Number(formData.packet_loss_pct),
+        throughput_mbps: Number(formData.throughput_mbps),
+        connected_users: Number(formData.connected_users),
+        traffic_load_pct: Number(formData.traffic_load_pct),
+        call_drop_rate_pct: Number(formData.call_drop_rate_pct),
+        resource_utilization_pct: Number(formData.resource_utilization_pct),
+        timestamp: formData.timestamp || undefined,
+      };
+
+      const res = await predictRecord(payload, persist, manualImpute);
+      setPreviewResult(res.reading);
+      if (res.validation?.warnings?.length) {
+        setManualWarnings(res.validation.warnings);
+      }
+      if (persist) {
+        setPersistSuccess(true);
+        await refreshData();
+        await loadInventory();
+      }
+    } catch (err: any) {
+      if (err.errors && Array.isArray(err.errors)) {
+        setManualErrors(err.errors);
+      } else {
+        setManualErrors([err.message || 'Validation or prediction failed']);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const companyIngestedCells = cells.filter(c => c.isCompanyIngested || c.id === 'MH-PN-102');
+  // CSV Dry Run
+  const handleCsvDryRun = async () => {
+    if (!csvFile || !isOnline) return;
+    setIsDryRunning(true);
+    setCsvError(null);
+    setConfirmedReport(null);
+
+    try {
+      const report = await ingestCsv(csvFile, true, csvImpute);
+      setDryRunReport(report);
+    } catch (err: any) {
+      setCsvError(err.message || 'Dry run validation failed');
+    } finally {
+      setIsDryRunning(false);
+    }
+  };
+
+  // CSV Confirm Import
+  const handleCsvConfirm = async () => {
+    if (!csvFile || !isOnline) return;
+    setIsConfirming(true);
+    setCsvError(null);
+
+    try {
+      const report = await ingestCsv(csvFile, false, csvImpute);
+      setConfirmedReport(report);
+      await refreshData();
+      await loadInventory();
+    } catch (err: any) {
+      setCsvError(err.message || 'Data ingestion failed');
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  // Download rejected rows as CSV
+  const handleDownloadRejectedRows = (rejectedRows: Array<{ row: number; reasons: string[] }>) => {
+    const header = 'Row,Reasons\n';
+    const lines = rejectedRows.map((r) => `${r.row},"${r.reasons.join('; ').replace(/"/g, '""')}"`).join('\n');
+    const blob = new Blob([header + lines], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `rejected_rows_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
-    <div className="p-6 rounded-2xl bg-[#1e293b] border border-[#334155] shadow-lg space-y-6">
+    <div className="p-6 rounded-2xl bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155] shadow-sm space-y-6">
       {/* Header & Tab Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#334155] pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#334155] pb-5">
         <div>
-          <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2.5">
-            <Database className="text-blue-400" size={22} />
-            <span>Telemetry Data Ingestion</span>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
+            <Database className="text-blue-500" size={22} />
+            <span>Telemetry Ingestion & Inference</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Input company network telemetry to run SVM Risk Classification and DBSCAN Anomaly Detection models.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Submit telemetry records to the backend pipeline for SVM risk classification and DBSCAN anomaly detection.
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center p-1 bg-[#0f172a] rounded-xl border border-[#334155]">
+        <div className="flex items-center p-1 bg-slate-100 dark:bg-[#0f172a] rounded-xl border border-slate-200 dark:border-[#334155]">
           <button
             onClick={() => setActiveTab('manual')}
             className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'manual'
                 ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
             Manual Entry
@@ -110,426 +243,916 @@ export const CompanyDataInputPanel: React.FC = () => {
             className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'csv'
                 ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            CSV / Excel Upload
+            CSV Ingestion (Two-Step)
           </button>
         </div>
       </div>
 
-      {/* Confirmation & AI Trigger Banner */}
-      {(submittedState === 'submitted' || submittedState === 'analyzed') && (
-        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex flex-col sm:flex-row items-center justify-between gap-4 transition-all">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 size={22} className="text-emerald-400 flex-shrink-0" />
-            <div>
-              <div className="text-sm font-bold text-emerald-300">Data Saved Successfully</div>
-              <div className="text-xs text-slate-300 mt-0.5">
-                Telemetry record for node <strong className="text-white">{submittedCell?.id}</strong> is ready for AI inference.
-              </div>
+      {/* ========================================================= */}
+      {/* MANUAL ENTRY TAB                                          */}
+      {/* ========================================================= */}
+      {activeTab === 'manual' && (
+        <div className="space-y-6">
+          {/* Demo Presets */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+            <span className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5">
+              <Sliders size={14} className="text-blue-500" />
+              <span>Demo presets (fills standard test parameters):</span>
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  applyPreset({
+                    asset_id: 'MH-PN-SHIV-901',
+                    asset_type: 'Cell Tower',
+                    city: 'Pune',
+                    country: 'India',
+                    region: 'Maharashtra',
+                    latitude: 18.5314,
+                    longitude: 73.8446,
+                    signal_strength_dbm: -106,
+                    latency_ms: 185,
+                    packet_loss_pct: 12.4,
+                    throughput_mbps: 4.2,
+                    connected_users: 1850,
+                    traffic_load_pct: 96,
+                    call_drop_rate_pct: 6.8,
+                    resource_utilization_pct: 98,
+                    timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                  })
+                }
+                className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-semibold transition-colors flex items-center gap-1.5"
+              >
+                <ShieldAlert size={14} />
+                <span>Pune Shivajinagar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  applyPreset({
+                    asset_id: 'MH-MB-MAR-802',
+                    asset_type: 'Base Station',
+                    city: 'Mumbai',
+                    country: 'India',
+                    region: 'Maharashtra',
+                    latitude: 18.922,
+                    longitude: 72.8223,
+                    signal_strength_dbm: -102,
+                    latency_ms: 168,
+                    packet_loss_pct: 10.8,
+                    throughput_mbps: 3.8,
+                    connected_users: 1940,
+                    traffic_load_pct: 97,
+                    call_drop_rate_pct: 7.2,
+                    resource_utilization_pct: 96,
+                    timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                  })
+                }
+                className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-semibold transition-colors flex items-center gap-1.5"
+              >
+                <ShieldAlert size={14} />
+                <span>Mumbai Marine Drive</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  applyPreset({
+                    asset_id: 'DL-DEL-CP-703',
+                    asset_type: 'Router',
+                    city: 'Delhi',
+                    country: 'India',
+                    region: 'Delhi',
+                    latitude: 28.6315,
+                    longitude: 77.2167,
+                    signal_strength_dbm: -108,
+                    latency_ms: 192,
+                    packet_loss_pct: 14.2,
+                    throughput_mbps: 2.5,
+                    connected_users: 2100,
+                    traffic_load_pct: 98.5,
+                    call_drop_rate_pct: 8.5,
+                    resource_utilization_pct: 99,
+                    timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                  })
+                }
+                className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 text-xs font-semibold transition-colors flex items-center gap-1.5"
+              >
+                <ShieldAlert size={14} />
+                <span>Delhi Connaught Place</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  applyPreset({
+                    asset_id: 'KA-BL-101',
+                    asset_type: 'Network Gateway',
+                    city: 'Bangalore',
+                    country: 'India',
+                    region: 'Karnataka',
+                    latitude: 12.9716,
+                    longitude: 77.5946,
+                    signal_strength_dbm: -65,
+                    latency_ms: 24,
+                    packet_loss_pct: 0.3,
+                    throughput_mbps: 260.0,
+                    connected_users: 140,
+                    traffic_load_pct: 32,
+                    call_drop_rate_pct: 0.2,
+                    resource_utilization_pct: 38,
+                    timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                  })
+                }
+                className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition-colors flex items-center gap-1.5"
+              >
+                <ShieldCheck size={14} />
+                <span>Bangalore Tech Hub</span>
+              </button>
             </div>
           </div>
 
-          <button
-            onClick={handleTriggerAiAnalysis}
-            disabled={analyzing}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 flex-shrink-0 shadow-md"
+          {/* Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleManualAction(false);
+            }}
+            className="space-y-5"
           >
-            {analyzing ? (
-              <>
-                <RefreshCw size={15} className="animate-spin" />
-                <span>Running AI Models...</span>
-              </>
-            ) : (
-              <>
-                <Brain size={15} />
-                <span>Run AI Diagnostics & Model Inference →</span>
-              </>
-            )}
-          </button>
-        </div>
-      )}
+            {/* Section 1: Identification & Location */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                1. Node Identification & Geographical Location
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Asset ID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.asset_id}
+                    onChange={(e) => handleInputChange('asset_id', e.target.value)}
+                    placeholder="e.g. MH-PN-999"
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 font-medium focus:outline-none"
+                  />
+                </div>
 
-      {/* Quick Load Test Presets bar */}
-      {activeTab === 'manual' && (
-        <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
-          <span className="text-slate-700 dark:text-slate-300 font-semibold">Real-Life Test Presets (1-Click Fill & Map Trace):</span>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setFormData({
-                cellId: 'MH-PN-SHIV-901',
-                assetType: 'tower',
-                latitude: 18.5314,
-                longitude: 73.8446,
-                location: 'Pune Shivajinagar',
-                signalStrength: -106,
-                latency: 185,
-                packetLoss: 12.4,
-                throughput: 4.2,
-                connectedUsers: 1850,
-                trafficLoad: 96,
-                callDropRate: 6.8,
-                resourceUtil: 98,
-                timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
-              })}
-              className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-300 border border-red-500/30 text-xs font-semibold transition-colors flex items-center gap-1.5"
-            >
-              <ShieldAlert size={14} className="text-red-500" />
-              <span>🚨 Pune Shivajinagar (High Risk)</span>
-            </button>
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Asset Type *</label>
+                  <select
+                    value={formData.asset_type}
+                    onChange={(e) => handleInputChange('asset_type', e.target.value)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 font-medium focus:outline-none"
+                  >
+                    <option value="Base Station">Base Station</option>
+                    <option value="Cell Tower">Cell Tower</option>
+                    <option value="Network Gateway">Network Gateway</option>
+                    <option value="Router">Router</option>
+                  </select>
+                </div>
 
-            <button
-              type="button"
-              onClick={() => setFormData({
-                cellId: 'MH-MB-MAR-802',
-                assetType: 'basestation',
-                latitude: 18.9220,
-                longitude: 72.8223,
-                location: 'Mumbai Marine Drive',
-                signalStrength: -102,
-                latency: 168,
-                packetLoss: 10.8,
-                throughput: 3.8,
-                connectedUsers: 1940,
-                trafficLoad: 97,
-                callDropRate: 7.2,
-                resourceUtil: 96,
-                timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
-              })}
-              className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-300 border border-red-500/30 text-xs font-semibold transition-colors flex items-center gap-1.5"
-            >
-              <ShieldAlert size={14} className="text-red-500" />
-              <span>🚨 Mumbai Marine Drive (High Risk)</span>
-            </button>
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">City</label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => handleInputChange('city', e.target.value)}
+                    placeholder="e.g. Pune"
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
 
-            <button
-              type="button"
-              onClick={() => setFormData({
-                cellId: 'DL-DEL-CP-703',
-                assetType: 'router',
-                latitude: 28.6315,
-                longitude: 77.2167,
-                location: 'Delhi Connaught Place',
-                signalStrength: -108,
-                latency: 192,
-                packetLoss: 14.2,
-                throughput: 2.5,
-                connectedUsers: 2100,
-                trafficLoad: 98.5,
-                callDropRate: 8.5,
-                resourceUtil: 99,
-                timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
-              })}
-              className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-300 border border-red-500/30 text-xs font-semibold transition-colors flex items-center gap-1.5"
-            >
-              <ShieldAlert size={14} className="text-red-500" />
-              <span>🚨 Delhi Connaught Place (High Risk)</span>
-            </button>
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Country</label>
+                  <input
+                    type="text"
+                    value={formData.country}
+                    onChange={(e) => handleInputChange('country', e.target.value)}
+                    placeholder="e.g. India"
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
 
-            <button
-              type="button"
-              onClick={() => setFormData({
-                cellId: 'KA-BL-101',
-                assetType: 'router',
-                latitude: 12.9716,
-                longitude: 77.5946,
-                location: 'Bangalore Indiranagar',
-                signalStrength: -65,
-                latency: 24,
-                packetLoss: 0.3,
-                throughput: 260.0,
-                connectedUsers: 140,
-                trafficLoad: 32,
-                callDropRate: 0.2,
-                resourceUtil: 38,
-                timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
-              })}
-              className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-colors flex items-center gap-1.5"
-            >
-              <Check size={14} className="text-emerald-500" />
-              <span>🟢 Bangalore Tech Hub (Healthy)</span>
-            </button>
-          </div>
-        </div>
-      )}
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Latitude</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={formData.latitude}
+                    onChange={(e) => handleInputChange('latitude', parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
 
-      {/* Manual Ingestion Form */}
-      {activeTab === 'manual' && (
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Section 1: Node Metadata & Location */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              1. Node Identification & Geographical Location
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Cell / Tower ID *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.cellId}
-                  onChange={e => handleInputChange('cellId', e.target.value)}
-                  placeholder="e.g. MH-PN-999"
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 font-medium focus:outline-none"
-                />
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Longitude</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={formData.longitude}
+                    onChange={(e) => handleInputChange('longitude', parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Timestamp</label>
+                  <input
+                    type="text"
+                    value={formData.timestamp}
+                    onChange={(e) => handleInputChange('timestamp', e.target.value)}
+                    placeholder="YYYY-MM-DD HH:MM:SS"
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
               </div>
+            </div>
 
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Asset Type *</label>
-                <select
-                  value={formData.assetType}
-                  onChange={e => handleInputChange('assetType', e.target.value as AssetType)}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 font-medium focus:outline-none"
+            {/* Section 2: Health & Performance Metrics */}
+            <div className="space-y-3 pt-2">
+              <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                2. Telemetry Parameters (8 Metrics)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Latency (ms) *</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    value={formData.latency_ms}
+                    onChange={(e) => handleInputChange('latency_ms', parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 font-semibold focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Packet Loss (%) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={formData.packet_loss_pct}
+                    onChange={(e) => handleInputChange('packet_loss_pct', parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 font-semibold focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Traffic Load (%) *</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    value={formData.traffic_load_pct}
+                    onChange={(e) => handleInputChange('traffic_load_pct', parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 font-semibold focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Signal Strength (dBm)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.signal_strength_dbm}
+                    onChange={(e) => handleInputChange('signal_strength_dbm', parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Throughput (Mbps)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.throughput_mbps}
+                    onChange={(e) => handleInputChange('throughput_mbps', parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Connected Users</label>
+                  <input
+                    type="number"
+                    value={formData.connected_users}
+                    onChange={(e) => handleInputChange('connected_users', parseInt(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Call Drop Rate (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.call_drop_rate_pct}
+                    onChange={(e) => handleInputChange('call_drop_rate_pct', parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Resource Utilization (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.resource_utilization_pct}
+                    onChange={(e) => handleInputChange('resource_utilization_pct', parseFloat(e.target.value) || 0)}
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Imputation Checkbox & Action Buttons */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-slate-200 dark:border-[#334155]">
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={manualImpute}
+                  onChange={(e) => setManualImpute(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>Impute missing values with training medians (backend)</span>
+              </label>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSubmitting || !isOnline}
+                  onClick={() => handleManualAction(false)}
+                  className="px-4 py-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs border border-slate-300 dark:border-slate-700 transition-all flex items-center gap-2 disabled:opacity-50"
                 >
-                  <option value="cell">Cell Sector</option>
-                  <option value="tower">Macro Cell Tower</option>
-                  <option value="basestation">Base Station (gNodeB)</option>
-                  <option value="router">Edge Router</option>
-                </select>
-              </div>
+                  {isSubmitting ? <RefreshCw size={14} className="animate-spin" /> : <Eye size={14} />}
+                  <span>Preview Prediction</span>
+                </button>
 
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Latitude *</label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  required
-                  value={formData.latitude}
-                  onChange={e => handleInputChange('latitude', Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Longitude *</label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  required
-                  value={formData.longitude}
-                  onChange={e => handleInputChange('longitude', Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 focus:outline-none"
-                />
+                <button
+                  type="button"
+                  disabled={isSubmitting || !isOnline}
+                  onClick={() => handleManualAction(true)}
+                  className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isSubmitting ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                  <span>Submit & Save Record</span>
+                </button>
               </div>
             </div>
-          </div>
+          </form>
 
-          {/* Section 2: Network Health & Performance */}
-          <div className="space-y-3 pt-2">
-            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              2. Health & Performance Telemetry
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Latency (ms) *</label>
-                <input
-                  type="number"
-                  required
-                  value={formData.latency}
-                  onChange={e => handleInputChange('latency', Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 font-semibold focus:outline-none"
-                />
+          {/* Validation Errors */}
+          {manualErrors.length > 0 && (
+            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <XCircle size={16} />
+                <span>Validation Failure:</span>
               </div>
-
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Packet Loss (%) *</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  required
-                  value={formData.packetLoss}
-                  onChange={e => handleInputChange('packetLoss', Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 font-semibold focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Signal Strength (dBm)</label>
-                <input
-                  type="number"
-                  value={formData.signalStrength}
-                  onChange={e => handleInputChange('signalStrength', Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Throughput (Mbps)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={formData.throughput}
-                  onChange={e => handleInputChange('throughput', Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 focus:outline-none"
-                />
-              </div>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {manualErrors.map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
             </div>
-          </div>
+          )}
 
-          {/* Section 3: Traffic & Resource Utilization */}
-          <div className="space-y-3 pt-2">
-            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              3. Traffic Load & Capacity Telemetry
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Connected Users</label>
-                <input
-                  type="number"
-                  value={formData.connectedUsers}
-                  onChange={e => handleInputChange('connectedUsers', Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 focus:outline-none"
-                />
+          {/* Validation Warnings */}
+          {manualWarnings.length > 0 && (
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <AlertTriangle size={16} />
+                <span>Validation Warnings:</span>
               </div>
-
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Traffic Load (%) *</label>
-                <input
-                  type="number"
-                  required
-                  value={formData.trafficLoad}
-                  onChange={e => handleInputChange('trafficLoad', Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 font-semibold focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Call Drop Rate (%)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={formData.callDropRate}
-                  onChange={e => handleInputChange('callDropRate', Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Resource Utilization (%)</label>
-                <input
-                  type="number"
-                  value={formData.resourceUtil}
-                  onChange={e => handleInputChange('resourceUtil', Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-300 font-medium block mb-1">Timestamp *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.timestamp}
-                  onChange={e => handleInputChange('timestamp', e.target.value)}
-                  className="w-full p-2.5 rounded-lg bg-[#0f172a] border border-[#334155] focus:border-blue-500 text-slate-100 focus:outline-none"
-                />
-              </div>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {manualWarnings.map((warn, i) => (
+                  <li key={i}>{warn}</li>
+                ))}
+              </ul>
             </div>
-          </div>
+          )}
 
-          <div className="flex items-center justify-end pt-3">
-            <button
-              type="submit"
-              className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-md transition-all flex items-center gap-2"
-            >
-              <CheckCircle2 size={16} />
-              <span>Save Telemetry Record</span>
-            </button>
-          </div>
-        </form>
-      )}
+          {/* Prediction Result Display */}
+          {previewResult && (
+            <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: getStatusStyle(previewResult.status).hex }}
+                  />
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                    Backend Pipeline Results for {previewResult.asset_id}
+                  </h4>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  {persistSuccess ? (
+                    <span className="px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/30 flex items-center gap-1">
+                      <CheckCircle2 size={13} />
+                      <span>Record Persisted to Database</span>
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">
+                      Preview Only (Not Persisted)
+                    </span>
+                  )}
+                </div>
+              </div>
 
-      {/* CSV Upload Tab */}
-      {activeTab === 'csv' && (
-        <div className="p-8 rounded-xl bg-[#0f172a] border-2 border-dashed border-[#334155] hover:border-blue-500 transition-all text-center space-y-4">
-          <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mx-auto text-blue-400">
-            <FileSpreadsheet size={24} />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-100">Upload Telemetry File (.CSV or .XLSX)</h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-lg mx-auto">
-              Required headers: Cell/Tower ID, Asset Type, Latitude, Longitude, Signal Strength, Latency, Packet Loss, Throughput, Connected Users, Traffic Load, Call Drop Rate, Resource Utilization, Timestamp.
-            </p>
-          </div>
+              {/* Badges and Scores */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155]">
+                  <span className="text-slate-500 dark:text-slate-400 block mb-1">SVM Risk Classification</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        previewResult.is_at_risk
+                          ? 'bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30'
+                          : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                      }`}
+                    >
+                      {previewResult.risk_label}
+                    </span>
+                    <span className="font-mono text-slate-700 dark:text-slate-300">
+                      Score: {(previewResult.risk_score * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
 
-          <label className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs cursor-pointer transition-colors shadow-sm">
-            <Upload size={16} />
-            <span>{uploading ? 'Processing File...' : 'Choose File'}</span>
-            <input type="file" accept=".csv, .xlsx" onChange={handleCsvUploadSim} className="hidden" />
-          </label>
+                <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155]">
+                  <span className="text-slate-500 dark:text-slate-400 block mb-1">DBSCAN Anomaly Detection</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        previewResult.is_anomaly
+                          ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30'
+                          : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                      }`}
+                    >
+                      {previewResult.is_anomaly ? 'Anomaly' : 'Normal Cluster'}
+                    </span>
+                    <span className="font-mono text-slate-500 text-[11px]">
+                      (Cluster: {previewResult.dbscan_cluster})
+                    </span>
+                  </div>
+                </div>
 
-          {csvFileName && (
-            <div className="text-xs text-blue-400 font-medium">
-              Uploaded: {csvFileName}
+                <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155]">
+                  <span className="text-slate-500 dark:text-slate-400 block mb-1">System Health Status</span>
+                  <span
+                    className="inline-block px-2.5 py-0.5 rounded text-xs font-bold uppercase"
+                    style={{
+                      color: getStatusStyle(previewResult.status).hex,
+                      backgroundColor: `${getStatusStyle(previewResult.status).hex}20`,
+                    }}
+                  >
+                    {previewResult.status}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155]">
+                  <span className="text-slate-500 dark:text-slate-400 block mb-1">Model Version</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-300 text-xs">
+                    {previewResult.model_version || '2.0.0'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Threshold breaches */}
+              {previewResult.threshold_breaches?.length > 0 ? (
+                <div className="space-y-1.5 text-xs">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    Threshold breaches (rule-based):
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {previewResult.threshold_breaches.map((b, i) => (
+                      <span
+                        key={i}
+                        className="px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-mono text-[11px]"
+                      >
+                        {b.metric} {b.operator} {b.limit} (actual: {b.value})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  ✓ No threshold breaches detected against configured operational limits.
+                </div>
+              )}
+
+              {persistSuccess && (
+                <div className="pt-2 flex justify-end">
+                  <button
+                    onClick={() => navigate(`/map?asset=${previewResult.asset_id}`)}
+                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors flex items-center gap-1.5"
+                  >
+                    <MapPin size={14} />
+                    <span>Locate on Map →</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* Ingested Records Inventory Table */}
-      <div className="space-y-3 pt-4 border-t border-[#334155]">
-        <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
-          Ingested Telemetry Inventory ({companyIngestedCells.length} Nodes)
-        </h3>
+      {/* ========================================================= */}
+      {/* CSV INGESTION TAB                                         */}
+      {/* ========================================================= */}
+      {activeTab === 'csv' && (
+        <div className="space-y-6">
+          <div className="p-8 rounded-xl bg-slate-50 dark:bg-[#0f172a] border-2 border-dashed border-slate-300 dark:border-[#334155] hover:border-blue-500 transition-all text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mx-auto text-blue-500">
+              <FileSpreadsheet size={24} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                Select Telemetry CSV File
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-lg mx-auto">
+                Upload CSV file with asset identifiers and telemetry readings. Header aliases are automatically supported by the backend ingestion engine.
+              </p>
+            </div>
 
-        <div className="overflow-x-auto">
+            <div className="flex flex-col items-center gap-3">
+              <label className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs cursor-pointer transition-colors shadow-sm">
+                <Upload size={16} />
+                <span>{csvFile ? 'Change File' : 'Choose CSV File'}</span>
+                <input
+                  type="file"
+                  accept=".csv, text/csv"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setCsvFile(file);
+                    setDryRunReport(null);
+                    setConfirmedReport(null);
+                    setCsvError(null);
+                  }}
+                  className="hidden"
+                />
+              </label>
+
+              {csvFile && (
+                <div className="text-xs text-blue-500 font-medium">
+                  Selected: <strong>{csvFile.name}</strong> ({(csvFile.size / 1024).toFixed(1)} KB)
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Options & Action Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+            <label className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={csvImpute}
+                onChange={(e) => setCsvImpute(e.target.checked)}
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span>Impute missing values with training medians (impute=true)</span>
+            </label>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={!csvFile || isDryRunning || !isOnline}
+                onClick={handleCsvDryRun}
+                className="px-4 py-2.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {isDryRunning ? <RefreshCw size={14} className="animate-spin" /> : <Eye size={14} />}
+                <span>Step 1: Run Dry-Run Validation</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={!csvFile || !dryRunReport || isConfirming || !isOnline}
+                onClick={handleCsvConfirm}
+                className="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {isConfirming ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                <span>Step 2: Confirm & Ingest Records</span>
+              </button>
+            </div>
+          </div>
+
+          {/* CSV Error */}
+          {csvError && (
+            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs flex items-center gap-2">
+              <XCircle size={16} className="flex-shrink-0" />
+              <span>{csvError}</span>
+            </div>
+          )}
+
+          {/* Ingestion Report (Dry-Run or Confirmed) */}
+          {(dryRunReport || confirmedReport) && (
+            <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <FileSpreadsheet size={18} className="text-blue-500" />
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                    Ingestion Report: {(confirmedReport || dryRunReport)?.filename}
+                  </h4>
+                </div>
+                <span
+                  className={`px-2.5 py-1 rounded text-xs font-semibold ${
+                    confirmedReport
+                      ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                  }`}
+                >
+                  {confirmedReport ? 'Import Confirmed (Live In Database)' : 'Dry-Run Preview (No DB Changes)'}
+                </span>
+              </div>
+
+              {/* Counters Grid */}
+              {(() => {
+                const rep = confirmedReport || dryRunReport;
+                if (!rep) return null;
+                return (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+                      <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155]">
+                        <span className="text-slate-500 text-[11px] block">Total Rows</span>
+                        <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                          {rep.rows_total}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155]">
+                        <span className="text-emerald-600 dark:text-emerald-400 text-[11px] block">Accepted</span>
+                        <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                          {rep.accepted}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155]">
+                        <span className="text-red-600 dark:text-red-400 text-[11px] block">Rejected</span>
+                        <span className="text-lg font-bold text-red-600 dark:text-red-400">
+                          {rep.rejected}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155]">
+                        <span className="text-blue-500 text-[11px] block">Imputed</span>
+                        <span className="text-lg font-bold text-blue-500">{rep.imputed}</span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155]">
+                        <span className="text-slate-500 text-[11px] block">Updated</span>
+                        <span className="text-lg font-bold text-slate-700 dark:text-slate-300">
+                          {rep.updated}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155]">
+                        <span className="text-amber-500 text-[11px] block">Duplicates</span>
+                        <span className="text-lg font-bold text-amber-500">
+                          {rep.duplicates_in_file}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Risk Summary */}
+                    {rep.risk_summary && (
+                      <div className="p-3 rounded-lg bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-[#334155] text-xs space-y-2">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">
+                          Inferred Risk & Anomaly Summary:
+                        </span>
+                        <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
+                          <span className="text-red-500 font-semibold">
+                            At Risk: {rep.risk_summary.at_risk}
+                          </span>
+                          <span className="text-purple-500 font-semibold">
+                            Anomalies: {rep.risk_summary.anomalies}
+                          </span>
+                          <span className="text-slate-400">|</span>
+                          <span className="text-emerald-500">
+                            Green: {rep.risk_summary.status_counts?.green || 0}
+                          </span>
+                          <span className="text-yellow-500">
+                            Yellow: {rep.risk_summary.status_counts?.yellow || 0}
+                          </span>
+                          <span className="text-purple-500">
+                            Purple: {rep.risk_summary.status_counts?.purple || 0}
+                          </span>
+                          <span className="text-red-500">
+                            Red: {rep.risk_summary.status_counts?.red || 0}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Rejected Rows & Download button */}
+                    {rep.rejected_rows && rep.rejected_rows.length > 0 && (
+                      <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                            <AlertTriangle size={15} />
+                            <span>{rep.rejected_rows.length} rows rejected during validation</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadRejectedRows(rep.rejected_rows)}
+                            className="px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-white font-semibold text-[11px] transition-colors flex items-center gap-1"
+                          >
+                            <Download size={13} />
+                            <span>Download Rejected Rows (CSV)</span>
+                          </button>
+                        </div>
+
+                        <div className="max-h-36 overflow-y-auto space-y-1 text-[11px] font-mono text-red-700 dark:text-red-300">
+                          {rep.rejected_rows.slice(0, 10).map((r, i) => (
+                            <div key={i} className="truncate">
+                              Row {r.row}: {r.reasons.join('; ')}
+                            </div>
+                          ))}
+                          {rep.rejected_rows.length > 10 && (
+                            <div className="text-slate-400 italic">
+                              ... and {rep.rejected_rows.length - 10} more rows (download CSV for full list)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* INGESTED RECORDS TABLE                                    */}
+      {/* ========================================================= */}
+      <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-[#334155]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+              Ingested Records Inventory ({inventoryData?.total || 0} assets)
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Source of truth records stored in the SQLite backend database.
+            </p>
+          </div>
+
+          {/* Filter & Refresh */}
+          <div className="flex items-center gap-2">
+            <select
+              value={inventorySource}
+              onChange={(e) => {
+                setInventorySource(e.target.value);
+                setInventoryPage(1);
+              }}
+              className="p-1.5 text-xs rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] text-slate-900 dark:text-slate-100"
+            >
+              <option value="manual">Manual entries</option>
+              <option value="csv">CSV imports</option>
+              <option value="seed">Seed dataset</option>
+              <option value="all">All sources</option>
+            </select>
+
+            <button
+              onClick={() => loadInventory()}
+              disabled={inventoryLoading}
+              className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700 transition-colors"
+              title="Refresh inventory"
+            >
+              <RefreshCw size={13} className={inventoryLoading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-[#334155]">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-[#334155] text-slate-400 bg-[#0f172a]">
-                <th className="p-3 font-semibold">Node ID</th>
+              <tr className="border-b border-slate-200 dark:border-[#334155] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#0f172a]">
+                <th className="p-3 font-semibold">Asset ID</th>
                 <th className="p-3 font-semibold">Type</th>
-                <th className="p-3 font-semibold">Coordinates</th>
+                <th className="p-3 font-semibold">Location</th>
                 <th className="p-3 font-semibold">Latency</th>
                 <th className="p-3 font-semibold">Packet Loss</th>
                 <th className="p-3 font-semibold">Traffic Load</th>
-                <th className="p-3 font-semibold text-indigo-300">SVM Risk</th>
-                <th className="p-3 font-semibold text-purple-300">DBSCAN Anomaly</th>
+                <th className="p-3 font-semibold">Risk Classification</th>
+                <th className="p-3 font-semibold">DBSCAN Anomaly</th>
+                <th className="p-3 font-semibold">Status</th>
                 <th className="p-3 font-semibold text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#334155]">
-              {companyIngestedCells.map(cell => (
-                <tr key={cell.id} className="hover:bg-[#0f172a]/60 transition-colors">
-                  <td className="p-3 font-bold text-blue-400">{cell.id}</td>
-                  <td className="p-3 uppercase text-slate-300 font-medium">{cell.assetType}</td>
-                  <td className="p-3 text-slate-400 font-mono text-[11px]">{cell.lat.toFixed(4)}, {cell.lng.toFixed(4)}</td>
-                  <td className={`p-3 font-semibold ${cell.latency > 100 ? 'text-red-400' : 'text-slate-200'}`}>{cell.latency} ms</td>
-                  <td className={`p-3 font-semibold ${cell.packetLoss > 5 ? 'text-red-400' : 'text-slate-200'}`}>{cell.packetLoss}%</td>
-                  <td className={`p-3 font-semibold ${cell.trafficLoad > 90 ? 'text-red-400' : 'text-slate-200'}`}>{cell.trafficLoad}%</td>
-                  <td className="p-3">
-                    <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
-                      cell.svmRiskCategory === 'At Risk' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400'
-                    }`}>
-                      {cell.svmRiskCategory} ({cell.svmRiskScore}%)
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
-                      cell.dbscanClassification === 'Anomaly' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-emerald-500/20 text-emerald-400'
-                    }`}>
-                      {cell.dbscanClassification} ({cell.dbscanAnomalyScore})
-                    </span>
-                  </td>
-                  <td className="p-3 text-right">
-                    <button
-                      onClick={() => {
-                        setSelectedCell(cell);
-                        navigate('/map');
-                      }}
-                      className="px-2.5 py-1 rounded bg-[#0f172a] hover:bg-blue-600 text-slate-300 hover:text-white font-medium text-[11px] transition-colors border border-[#334155]"
-                    >
-                      Locate on Map
-                    </button>
+            <tbody className="divide-y divide-slate-200 dark:divide-[#334155] bg-white dark:bg-slate-900">
+              {inventoryLoading ? (
+                <tr>
+                  <td colSpan={10} className="p-8 text-center text-slate-500">
+                    <RefreshCw size={18} className="animate-spin inline-block mr-2" />
+                    Loading inventory records...
                   </td>
                 </tr>
-              ))}
+              ) : !inventoryData || inventoryData.items.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="p-8 text-center text-slate-500">
+                    No records found for source &quot;{inventorySource}&quot;. Submit a record or upload a CSV file above.
+                  </td>
+                </tr>
+              ) : (
+                inventoryData.items.map((asset) => (
+                  <tr key={asset.asset_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+                    <td className="p-3 font-bold text-blue-500 font-mono">{asset.asset_id}</td>
+                    <td className="p-3 text-slate-700 dark:text-slate-300 font-medium">{asset.asset_type}</td>
+                    <td className="p-3 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+                      {asset.city ? `${asset.city}, ` : ''}{asset.country || 'N/A'}
+                    </td>
+                    <td className="p-3 font-mono font-semibold text-slate-800 dark:text-slate-200">
+                      {asset.latency_ms.toFixed(1)} ms
+                    </td>
+                    <td className="p-3 font-mono font-semibold text-slate-800 dark:text-slate-200">
+                      {asset.packet_loss_pct.toFixed(1)}%
+                    </td>
+                    <td className="p-3 font-mono font-semibold text-slate-800 dark:text-slate-200">
+                      {asset.traffic_load_pct.toFixed(1)}%
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          asset.is_at_risk
+                            ? 'bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30'
+                            : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                        }`}
+                      >
+                        {asset.risk_label} ({(asset.risk_score * 100).toFixed(0)}%)
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          asset.is_anomaly
+                            ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30'
+                            : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                        }`}
+                      >
+                        {asset.is_anomaly ? 'Anomaly' : 'Inlier'}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className="inline-block px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                        style={{
+                          color: getStatusStyle(asset.status).hex,
+                          backgroundColor: `${getStatusStyle(asset.status).hex}20`,
+                        }}
+                      >
+                        {asset.status}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right">
+                      <button
+                        onClick={() => navigate(`/map?asset=${encodeURIComponent(asset.asset_id)}`)}
+                        className="px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-300 font-medium text-[11px] transition-colors border border-slate-300 dark:border-slate-700 flex items-center gap-1 ml-auto"
+                      >
+                        <MapPin size={12} />
+                        <span>Locate</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
+
+        {/* Paging controls */}
+        {inventoryData && inventoryData.total > 10 && (
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2">
+            <span>
+              Showing {((inventoryPage - 1) * 10) + 1} to {Math.min(inventoryPage * 10, inventoryData.total)} of{' '}
+              {inventoryData.total} assets
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={inventoryPage <= 1}
+                onClick={() => setInventoryPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 disabled:opacity-40 flex items-center gap-1"
+              >
+                <ChevronLeft size={14} />
+                <span>Previous</span>
+              </button>
+              <span>
+                Page {inventoryPage} of {Math.ceil(inventoryData.total / 10)}
+              </span>
+              <button
+                disabled={inventoryPage >= Math.ceil(inventoryData.total / 10)}
+                onClick={() => setInventoryPage((p) => p + 1)}
+                className="px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 disabled:opacity-40 flex items-center gap-1"
+              >
+                <span>Next</span>
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
-
