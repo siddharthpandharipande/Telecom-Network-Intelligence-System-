@@ -1,221 +1,144 @@
 """
 NEXUSNET - AI-Powered Telecom Network Intelligence System
 =========================================================
-Module: Single Record SVM Risk Prediction
+Module: Single Record Telecom Asset Risk & Anomaly Prediction (CLI)
 Description:
     Takes ONE raw/company-level telecom network asset telemetry record,
-    automatically calculates engineered features (Stress Index, Signal Quality, Throughput/User, Peak Hour),
-    applies the pre-trained StandardScaler (without refitting), and predicts whether the asset is
-    'Normal' or 'At Risk' using the trained SVM (RBF Kernel) classifier.
+    applies the hardened offline ML inference pipeline:
+    - Feature engineering (local hour, stress index, signal quality score, throughput per user)
+    - Shipped RBF SVM Pipeline (probability calibration, risk classification)
+    - Real DBSCAN Nearest-Core Sample Anomaly Scoring
+    - SLA Rule-Based Policy Audit (Threshold Breaches)
 
 College / Academic Project Implementation
 Author: Siddharth Pandharipande
 """
 
-import os
 import sys
+from pathlib import Path
 
 # Ensure UTF-8 output encoding for Windows terminal compatibility
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
-import joblib
-import pandas as pd
+# Add backend directory to sys.path to support execution from any working directory
+BACKEND_DIR = Path(__file__).resolve().parent
+REPO_ROOT = BACKEND_DIR.parent
+for p in [str(REPO_ROOT), str(BACKEND_DIR)]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
 import numpy as np
+import pandas as pd
 
-def load_svm_artifacts():
+from backend.ml.inference import (
+    get_config,
+    predict_svm,
+    score_dbscan,
+    threshold_breaches,
+)
+from backend.ml.features import engineer_features
+
+
+def predict_single_record(raw_record: dict) -> dict:
+    """Predict Network Status, Anomaly Status, and SLA Breaches for ONE asset record.
+
+    Parameters
+    ----------
+    raw_record : dict
+        Dictionary containing raw telemetry fields.
+
+    Returns
+    -------
+    dict
+        Dictionary containing predictions, anomaly scoring, and SLA breaches.
     """
-    Loads pre-trained SVM model and StandardScaler from disk.
-    Checks both local directory and models/ subdirectory.
-    """
-    model_paths = ["nexusnet_svm_model.pkl", os.path.join("models", "nexusnet_svm_model.pkl")]
-    scaler_paths = ["nexusnet_scaler.pkl", os.path.join("models", "nexusnet_scaler.pkl")]
+    # 1. Convert to single-row DataFrame
+    input_df = pd.DataFrame([raw_record])
 
-    svm_model = None
-    scaler = None
+    # 2. Compute engineered features for inspection
+    engineered = engineer_features(input_df).iloc[0]
 
-    for p in model_paths:
-        if os.path.exists(p):
-            svm_model = joblib.load(p)
-            break
+    # 3. Call canonical ML inference functions
+    svm_res = predict_svm(input_df).iloc[0]
+    dbscan_res = score_dbscan(input_df).iloc[0]
+    breaches = threshold_breaches(raw_record)
 
-    for p in scaler_paths:
-        if os.path.exists(p):
-            scaler = joblib.load(p)
-            break
+    asset_id = raw_record.get("Asset_ID", "NEXUS-NODE-001")
+    asset_type = raw_record.get("Asset_Type", "Unknown")
+    lat = float(raw_record.get("Latitude", 0.0))
+    lng = float(raw_record.get("Longitude", 0.0))
+    ts_str = str(raw_record.get("Timestamp", "2026-09-16 12:00:00"))
 
-    if svm_model is None or scaler is None:
-        raise FileNotFoundError(
-            "Model artifacts missing! Please run 'python train_svm.py' first to generate model.pkl and scaler.pkl."
-        )
+    status_label = svm_res["risk_label"]
+    confidence_pct = (svm_res["risk_score"] if svm_res["is_at_risk"] else (1.0 - svm_res["risk_score"])) * 100.0
 
-    return svm_model, scaler
+    # 4. Display clean NOC terminal report
+    print("\n" + "=" * 78)
+    print("      NEXUSNET TELECOM NOC - AI NETWORK RISK & ANOMALY SYSTEM")
+    print("=" * 78)
 
-
-def predict_single_record(raw_record: dict):
-    """
-    Predicts Network Status (Normal vs At Risk) for ONE telecom network asset record.
-    
-    Parameters:
-    -----------
-    raw_record : dict containing the 13 raw company-level fields:
-        - Asset_ID
-        - Asset_Type
-        - Latitude
-        - Longitude
-        - Signal_Strength_dBm
-        - Latency_ms
-        - Packet_Loss_pct
-        - Throughput_Mbps
-        - Connected_Users
-        - Traffic_Load_pct
-        - Call_Drop_Rate_pct
-        - Resource_Utilization_pct
-        - Timestamp
-    """
-    # 1. Load trained SVM model and pre-fitted Scaler
-    svm_model, scaler = load_svm_artifacts()
-
-    # 2. Extract raw input values
-    asset_id = raw_record.get('Asset_ID', 'NEXUS-NODE-001')
-    asset_type = raw_record.get('Asset_Type', 'Cell Tower')
-    lat = raw_record.get('Latitude', 0.0)
-    lng = raw_record.get('Longitude', 0.0)
-
-    sig_strength = float(raw_record.get('Signal_Strength_dBm', -80.0))
-    latency = float(raw_record.get('Latency_ms', 50.0))
-    packet_loss = float(raw_record.get('Packet_Loss_pct', 1.0))
-    throughput = float(raw_record.get('Throughput_Mbps', 100.0))
-    users = int(raw_record.get('Connected_Users', 200))
-    traffic_load = float(raw_record.get('Traffic_Load_pct', 50.0))
-    call_drop = float(raw_record.get('Call_Drop_Rate_pct', 1.0))
-    res_util = float(raw_record.get('Resource_Utilization_pct', 60.0))
-    timestamp_str = str(raw_record.get('Timestamp', '2026-10-01 18:00:00'))
-
-    # -------------------------------------------------------------------------
-    # AUTOMATIC FEATURE ENGINEERING (EXACT FORMULAS AS TRAINING)
-    # -------------------------------------------------------------------------
-    # A. Network Stress Index (%)
-    network_stress_index = (traffic_load + res_util + packet_loss + call_drop) / 4.0
-
-    # B. Signal Quality Score (Scale -105 to -55 dBm to 0-100%)
-    signal_quality_score = float(np.clip(((sig_strength + 105.0) / 50.0) * 100.0, 0.0, 100.0))
-
-    # C. Throughput per Connected User (Mbps/user)
-    throughput_per_user = (throughput / users) if users > 0 else 0.0
-
-    # D. Timestamp Decomposition & Peak Hour Flag
-    try:
-        ts = pd.to_datetime(timestamp_str)
-        peak_hour = 1 if (18 <= ts.hour <= 22) else 0
-    except Exception:
-        peak_hour = 1
-
-    # -------------------------------------------------------------------------
-    # FEATURE SELECTION & SCALING
-    # -------------------------------------------------------------------------
-    # Select ONLY the 9 predictive health features (excluding Asset_ID, Lat, Lng, etc.)
-    features_dict = {
-        'Signal_Strength_dBm': sig_strength,
-        'Latency_ms': latency,
-        'Packet_Loss_pct': packet_loss,
-        'Traffic_Load_pct': traffic_load,
-        'Call_Drop_Rate_pct': call_drop,
-        'Resource_Utilization_pct': res_util,
-        'Network_Stress_Index': network_stress_index,
-        'Signal_Quality_Score': signal_quality_score,
-        'Throughput_per_User': throughput_per_user
-    }
-
-    input_df = pd.DataFrame([features_dict])
-
-    # Apply the PRE-FITTED StandardScaler (DO NOT fit a new scaler!)
-    scaled_features = scaler.transform(input_df)
-
-    # -------------------------------------------------------------------------
-    # SVM PREDICTION & CONFIDENCE
-    # -------------------------------------------------------------------------
-    prediction_class = svm_model.predict(scaled_features)[0]  # 0 = Normal, 1 = At Risk
-    prediction_probs = svm_model.predict_proba(scaled_features)[0]
-
-    status_label = "AT RISK" if prediction_class == 1 else "NORMAL"
-    confidence_pct = prediction_probs[prediction_class] * 100.0
-
-    # -------------------------------------------------------------------------
-    # DISPLAY CLEAN CONSOLE OUTPUT
-    # -------------------------------------------------------------------------
-    print("\n" + "=" * 75)
-    print("      NEXUSNET TELECOM NOC - AI NETWORK RISK PREDICTION SYSTEM")
-    print("=" * 75)
-    
     print("\n📍 ASSET METADATA:")
     print(f"   • Asset ID          : {asset_id}")
     print(f"   • Asset Type        : {asset_type}")
     print(f"   • Geolocation       : Lat {lat:.4f}, Lng {lng:.4f}")
-    print(f"   • Telemetry Time    : {timestamp_str} (Peak Hour: {'YES' if peak_hour == 1 else 'NO'})")
+    print(f"   • Telemetry Time    : {ts_str} (Peak Hour: {'YES' if engineered['Peak_Hour'] == 1 else 'NO'})")
 
     print("\n⚙️ AUTOMATICALLY ENGINEERED METRICS:")
-    print(f"   • Network Stress Index  : {network_stress_index:.2f} %")
-    print(f"   • Signal Quality Score  : {signal_quality_score:.2f} / 100")
-    print(f"   • Throughput / User     : {throughput_per_user:.4f} Mbps/user")
+    print(f"   • Network Stress Index  : {engineered['Network_Stress_Index']:.2f} %")
+    print(f"   • Signal Quality Score  : {engineered['Signal_Quality_Score']:.2f} / 100")
+    print(f"   • Throughput / User     : {engineered['Throughput_per_User']:.4f} Mbps/user")
 
     print("\n📡 KEY INPUT TELEMETRY METRICS:")
-    print(f"   • Signal Strength (RSRP): {sig_strength:.2f} dBm")
-    print(f"   • Latency               : {latency:.2f} ms")
-    print(f"   • Packet Loss           : {packet_loss:.2f} %")
-    print(f"   • Traffic Load          : {traffic_load:.2f} %")
-    print(f"   • Call Drop Rate        : {call_drop:.2f} %")
-    print(f"   • Resource Utilization  : {res_util:.2f} %")
-    print(f"   • Throughput            : {throughput:.2f} Mbps")
-    print(f"   • Connected Users       : {users} users")
+    print(f"   • Signal Strength (RSRP): {float(raw_record.get('Signal_Strength_dBm', 0.0)):.2f} dBm")
+    print(f"   • Latency               : {float(raw_record.get('Latency_ms', 0.0)):.2f} ms")
+    print(f"   • Packet Loss           : {float(raw_record.get('Packet_Loss_pct', 0.0)):.2f} %")
+    print(f"   • Traffic Load          : {float(raw_record.get('Traffic_Load_pct', 0.0)):.2f} %")
+    print(f"   • Call Drop Rate        : {float(raw_record.get('Call_Drop_Rate_pct', 0.0)):.2f} %")
+    print(f"   • Resource Utilization  : {float(raw_record.get('Resource_Utilization_pct', 0.0)):.2f} %")
+    print(f"   • Throughput            : {float(raw_record.get('Throughput_Mbps', 0.0)):.2f} Mbps")
+    print(f"   • Connected Users       : {int(raw_record.get('Connected_Users', 0))} users")
 
-    print("\n" + "-" * 75)
-    if prediction_class == 1:
-        print(f" 🚨 SVM PREDICTION STATUS : [{status_label}] (AT RISK)")
+    print("\n" + "-" * 78)
+    if svm_res["is_at_risk"]:
+        print(f" 🚨 SVM PREDICTION STATUS : [{status_label.upper()}] (OPERATIONAL RISK DETECTED)")
     else:
-        print(f" 🟢 SVM PREDICTION STATUS : [{status_label}] (OPERATIONAL)")
-    print(f" 🎯 PREDICTION CONFIDENCE: {confidence_pct:.2f}%")
-    print("-" * 75)
+        print(f" 🟢 SVM PREDICTION STATUS : [{status_label.upper()}] (HEALTHY / OPERATIONAL)")
+    print(f" 🎯 MODEL CONFIDENCE      : {confidence_pct:.2f}% (Risk Probability: {svm_res['risk_score'] * 100.0:.2f}%)")
 
-    print("\n📋 NETWORK HEALTH SUMMARY & DIAGNOSIS:")
-    if prediction_class == 1:
-        print("   ⚠️ CRITICAL WARNING: Asset is exhibiting operational stress and risk of service degradation.")
-        reasons = []
-        if network_stress_index > 50:
-            reasons.append(f"High Network Stress Index ({network_stress_index:.1f}%)")
-        if latency > 100:
-            reasons.append(f"High Latency ({latency:.1f} ms)")
-        if packet_loss > 3.0:
-            reasons.append(f"Elevated Packet Loss ({packet_loss:.1f}%)")
-        if call_drop > 2.5:
-            reasons.append(f"High Call Drop Rate ({call_drop:.1f}%)")
-        if signal_quality_score < 30:
-            reasons.append(f"Poor Signal Quality Score ({signal_quality_score:.1f}/100)")
-        
-        if reasons:
-            print("   Primary Contributing Degradation Drivers:")
-            for r in reasons:
-                print(f"    - {r}")
-        print("   Recommended Action: Dispatch NOC Field Technicians / Trigger Dynamic Bandwidth Allocation.")
+    # DBSCAN Anomaly Status
+    if dbscan_res["is_anomaly"]:
+        print(f" ⚠️ DBSCAN ANOMALY STATUS : [OUTLIER / NOISE (Cluster {dbscan_res['dbscan_cluster']})]")
     else:
-        print("   ✅ ALL SYSTEMS NORMAL: Asset operates well within optimal health boundaries.")
-        print("   Key Indicators: Low packet loss, manageable traffic load, and stable latency.")
-        print("   Recommended Action: Maintain routine monitoring.")
+        print(f" 🔹 DBSCAN ANOMALY STATUS : [INLIER (Cluster {dbscan_res['dbscan_cluster']})]")
+    print(f" 📏 NEAREST CORE DISTANCE : {dbscan_res['nearest_core_distance']:.4f}")
+    print("-" * 78)
 
-    print("=" * 75 + "\n")
+    print("\n📋 RULE-BASED SLA THRESHOLD AUDIT (Policy Check - Not Model Explanation):")
+    if breaches:
+        print(f"   ⚠️ Detected {len(breaches)} SLA policy breach(es):")
+        for b in breaches:
+            print(f"      - {b['metric']}: {b['value']} {b['operator']} {b['limit']} ({b['message']})")
+    else:
+        print("   ✅ Asset satisfies all standard operational SLA thresholds.")
+
+    print("=" * 78 + "\n")
 
     return {
         "Asset_ID": asset_id,
         "Status": status_label,
-        "Confidence_pct": confidence_pct,
-        "Network_Stress_Index": network_stress_index,
-        "Signal_Quality_Score": signal_quality_score,
-        "Throughput_per_User": throughput_per_user
+        "Risk_Score": float(svm_res["risk_score"]),
+        "Confidence_pct": float(confidence_pct),
+        "is_at_risk": bool(svm_res["is_at_risk"]),
+        "dbscan_cluster": int(dbscan_res["dbscan_cluster"]),
+        "is_anomaly": bool(dbscan_res["is_anomaly"]),
+        "nearest_core_distance": float(dbscan_res["nearest_core_distance"]),
+        "threshold_breaches": breaches,
     }
 
 
 if __name__ == "__main__":
-    print("\n--- RUNNING DEMO SINGLE RECORD PREDICTIONS ---")
+    print("\n--- RUNNING DEMO SINGLE RECORD PREDICTIONS (HARDENED ML INFERENCE) ---")
 
     # Sample 1: AT RISK Asset Input Record
     at_risk_record = {
@@ -231,7 +154,7 @@ if __name__ == "__main__":
         "Traffic_Load_pct": 88.0,
         "Call_Drop_Rate_pct": 4.1,
         "Resource_Utilization_pct": 92.0,
-        "Timestamp": "2026-10-01 19:30:00"
+        "Timestamp": "2026-09-16 19:30:00",
     }
 
     print("\n>>> PREDICTING RECORD 1 (HIGH STRESS / AT RISK CANDIDATE):")
@@ -251,7 +174,7 @@ if __name__ == "__main__":
         "Traffic_Load_pct": 32.0,
         "Call_Drop_Rate_pct": 0.3,
         "Resource_Utilization_pct": 40.0,
-        "Timestamp": "2026-10-01 10:15:00"
+        "Timestamp": "2026-09-16 10:15:00",
     }
 
     print("\n>>> PREDICTING RECORD 2 (OPTIMAL HEALTH / NORMAL CANDIDATE):")
