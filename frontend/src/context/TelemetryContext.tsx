@@ -1,6 +1,97 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { NetworkCell, NetworkAsset, NetworkLink, Alert, Incident, TelemetryFormInput, AssetStatus } from '../types/telecom';
-import { INITIAL_CELLS, INITIAL_ASSETS, INITIAL_LINKS, INITIAL_ALERTS, INITIAL_INCIDENTS } from '../data/mockTelecomData';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import {
+  NetworkCell,
+  NetworkAsset,
+  NetworkLink,
+  Alert,
+  Incident,
+  TelemetryFormInput,
+  AssetStatus,
+} from '../types/telecom';
+import {
+  Reading,
+  Incident as ApiIncident,
+  StatsOverview,
+} from '../types/api';
+import {
+  getAssets,
+  getIncidents,
+  getStatsOverview,
+  predictRecord,
+  applyIncidentAction,
+} from '../api/client';
+
+export function readingToNetworkCell(r: Reading): NetworkCell {
+  const statusMap: Record<string, AssetStatus> = {
+    red: 'critical',
+    purple: 'anomaly',
+    yellow: 'warning',
+    green: 'healthy',
+  };
+
+  const mainFactor =
+    r.threshold_breaches && r.threshold_breaches.length > 0
+      ? r.threshold_breaches[0].message
+      : r.is_at_risk
+      ? 'SLA Operational Stress'
+      : r.is_anomaly
+      ? 'Multivariate Density Outlier'
+      : 'Optimal Baseline Telemetry';
+
+  return {
+    id: r.asset_id,
+    name: `${r.city || r.region || 'Node'} ${r.asset_type.toUpperCase()}`,
+    assetType: (r.asset_type.toLowerCase() as any) || 'cell',
+    region: r.region || r.continent || 'Global',
+    city: r.city || '',
+    lat: r.latitude || 0,
+    lng: r.longitude || 0,
+    users: r.connected_users,
+    latency: r.latency_ms,
+    packetLoss: r.packet_loss_pct,
+    trafficLoad: r.traffic_load_pct,
+    throughput: r.throughput_mbps,
+    signalStrength: r.signal_strength_dbm,
+    callDropRate: r.call_drop_rate_pct,
+    resourceUtil: r.resource_utilization_pct,
+    timestamp: r.timestamp,
+    networkAvailability: r.is_at_risk ? 94.2 : 99.8,
+    status: statusMap[r.status] || 'healthy',
+    svmRiskScore: Math.round(r.risk_score * 100),
+    svmRiskCategory: r.risk_label,
+    svmMainFactor: mainFactor,
+    dbscanClassification: r.is_anomaly ? 'Anomaly' : 'Normal',
+    dbscanAnomalyScore: parseFloat(r.nearest_core_distance.toFixed(3)),
+    lastUpdated: r.timestamp,
+    isCompanyIngested: r.source !== 'seed',
+  };
+}
+
+export function apiIncidentToUiIncident(inc: ApiIncident): Incident {
+  const timeStr = new Date(inc.created_at).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  return {
+    id: String(inc.id),
+    severity: inc.severity.toUpperCase() as any,
+    assetId: inc.asset_id,
+    region: 'NOC Region',
+    detectedTime: timeStr,
+    detectionSource: inc.source === 'auto' ? 'Automated SLA Monitor' : 'Manual Dispatch',
+    supportingDetection: 'Backend Pipeline Audit',
+    status: inc.status.toUpperCase() as any,
+    assignedOperator: inc.assignee || undefined,
+    timeline: (inc.events || []).map((e) => ({
+      time: new Date(e.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      event: `${e.action.toUpperCase()}: ${
+        e.note || (e.from_status ? `Transition from ${e.from_status} to ${e.to_status}` : 'Event recorded')
+      }`,
+      type: e.action === 'escalate' ? 'critical' : e.action === 'resolve' ? 'info' : 'action',
+    })),
+  };
+}
 
 interface TelemetryContextType {
   cells: NetworkCell[];
@@ -8,6 +99,9 @@ interface TelemetryContextType {
   links: NetworkLink[];
   alerts: Alert[];
   incidents: Incident[];
+  stats: StatsOverview | null;
+  isLoading: boolean;
+  error: string | null;
   selectedCell: NetworkCell | null;
   setSelectedCell: (cell: NetworkCell | null) => void;
   submittedCell: NetworkCell | null;
@@ -19,320 +113,260 @@ interface TelemetryContextType {
   lastTelemetryTime: string;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
-  acknowledgeIncident: (id: string) => void;
-  assignIncident: (id: string, operator: string) => void;
-  investigateIncident: (id: string) => void;
-  resolveIncident: (id: string) => void;
-  escalateIncident: (id: string) => void;
+  refreshData: () => Promise<void>;
+  acknowledgeIncident: (id: string) => Promise<void>;
+  assignIncident: (id: string, operator: string) => Promise<void>;
+  investigateIncident: (id: string) => Promise<void>;
+  resolveIncident: (id: string) => Promise<void>;
+  escalateIncident: (id: string) => Promise<void>;
   createIncident: (cellId: string) => void;
   findCellById: (id: string) => NetworkCell | undefined;
-  ingestNetworkData: (input: TelemetryFormInput) => void;
-  submitCompanyData: (input: TelemetryFormInput) => void;
-  runAiAnalysis: () => void;
+  ingestNetworkData: (input: TelemetryFormInput) => Promise<void>;
+  submitCompanyData: (input: TelemetryFormInput) => Promise<void>;
+  runAiAnalysis: () => Promise<void>;
 }
 
 const TelemetryContext = createContext<TelemetryContextType | undefined>(undefined);
 
 export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [cells, setCells] = useState<NetworkCell[]>(INITIAL_CELLS);
-  const [assets] = useState<NetworkAsset[]>(INITIAL_ASSETS);
-  const [links] = useState<NetworkLink[]>(INITIAL_LINKS);
-  const [alerts, setAlerts] = useState<Alert[]>(INITIAL_ALERTS);
-  const [incidents, setIncidents] = useState<Incident[]>(INITIAL_INCIDENTS);
-  const [selectedCell, setSelectedCell] = useState<NetworkCell | null>(INITIAL_CELLS[0]); // default MH-PN-102
-  const [isLive, setIsLive] = useState<boolean>(true);
-  const [lastTelemetryTime, setLastTelemetryTime] = useState<string>('2 seconds ago');
+  const [cells, setCells] = useState<NetworkCell[]>([]);
+  const [assets, setAssets] = useState<NetworkAsset[]>([]);
+  const [links] = useState<NetworkLink[]>([]); // No mock links in backend
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [stats, setStats] = useState<StatsOverview | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [selectedCell, setSelectedCell] = useState<NetworkCell | null>(null);
+  const [submittedCell, setSubmittedCell] = useState<NetworkCell | null>(null);
+  const [submittedRawInput, setSubmittedRawInput] = useState<TelemetryFormInput | null>(null);
+  const [submittedState, setSubmittedState] = useState<'idle' | 'submitted' | 'analyzed'>('idle');
+  const [activeWorkflowStep, setActiveWorkflowStep] = useState<number>(1);
+  const [isLive, setIsLive] = useState<boolean>(false); // No artificial jitter
+  const [lastTelemetryTime, setLastTelemetryTime] = useState<string>('Static snapshot');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Simulated live telemetry loop
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [assetsData, incidentsData, statsData] = await Promise.all([
+        getAssets({ page: 1, page_size: 100 }),
+        getIncidents({ page: 1, page_size: 50 }),
+        getStatsOverview().catch(() => null),
+      ]);
+
+      const mappedCells = assetsData.items.map(readingToNetworkCell);
+      setCells(mappedCells);
+
+      if (mappedCells.length > 0 && !selectedCell) {
+        setSelectedCell(mappedCells[0]);
+      }
+
+      // Map assets list
+      const mappedAssets: NetworkAsset[] = assetsData.items.map((r) => ({
+        id: r.asset_id,
+        name: `${r.city || r.region || 'Asset'} ${r.asset_type.toUpperCase()}`,
+        type: (r.asset_type.toLowerCase() as any) || 'cell',
+        region: r.region || r.country || 'Global',
+        lat: r.latitude || 0,
+        lng: r.longitude || 0,
+        status: (r.status === 'red'
+          ? 'critical'
+          : r.status === 'purple'
+          ? 'anomaly'
+          : r.status === 'yellow'
+          ? 'warning'
+          : 'healthy') as AssetStatus,
+        currentLoad: r.traffic_load_pct,
+        lastUpdate: r.timestamp,
+      }));
+      setAssets(mappedAssets);
+
+      // Map incidents
+      const mappedIncidents = incidentsData.items.map(apiIncidentToUiIncident);
+      setIncidents(mappedIncidents);
+
+      // Derive alerts from open incidents
+      const derivedAlerts: Alert[] = incidentsData.items
+        .filter((i) => i.status !== 'resolved')
+        .map((i) => ({
+          id: `ALT-${i.id}`,
+          severity: (i.severity as any) || 'high',
+          title: i.title,
+          assetId: i.asset_id,
+          timestamp: new Date(i.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          detectionSource: i.source === 'auto' ? 'SVM' : 'Health Monitor',
+          status: i.status === 'open' ? 'Open' : i.status === 'investigating' ? 'Investigating' : 'Resolved',
+        }));
+      setAlerts(derivedAlerts);
+
+      if (statsData) {
+        setStats(statsData);
+        if (statsData.time_range.min && statsData.time_range.max) {
+          setLastTelemetryTime(`${statsData.time_range.min} to ${statsData.time_range.max}`);
+        }
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to fetch telemetry data from backend');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedCell]);
+
   useEffect(() => {
-    if (!isLive) return;
-
-    const interval = setInterval(() => {
-      setCells(prevCells =>
-        prevCells.map(cell => {
-          // Slight realistic telemetry jitter
-          const latencyDelta = Math.floor((Math.random() - 0.48) * 3);
-          const packetDelta = parseFloat(((Math.random() - 0.48) * 0.2).toFixed(1));
-          const newLatency = Math.max(15, cell.latency + latencyDelta);
-          const newPacketLoss = Math.max(0.2, parseFloat((cell.packetLoss + packetDelta).toFixed(1)));
-
-          return {
-            ...cell,
-            latency: newLatency,
-            packetLoss: newPacketLoss,
-            lastUpdated: 'Just now'
-          };
-        })
-      );
-
-      setLastTelemetryTime('Just now');
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [isLive]);
+    loadData();
+  }, [loadData]);
 
   const findCellById = (id: string) => {
-    return cells.find(c => c.id.toLowerCase() === id.toLowerCase() || c.name.toLowerCase().includes(id.toLowerCase()));
-  };
-
-  const acknowledgeIncident = (id: string) => {
-    setIncidents(prev =>
-      prev.map(inc => {
-        if (inc.id === id) {
-          return {
-            ...inc,
-            status: 'ACKNOWLEDGED',
-            timeline: [
-              ...inc.timeline,
-              { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), event: 'Incident acknowledged by operator', type: 'action' }
-            ]
-          };
-        }
-        return inc;
-      })
+    return cells.find(
+      (c) => c.id.toLowerCase() === id.toLowerCase() || c.name.toLowerCase().includes(id.toLowerCase())
     );
   };
 
-  const assignIncident = (id: string, operator: string) => {
-    setIncidents(prev =>
-      prev.map(inc => {
-        if (inc.id === id) {
-          return {
-            ...inc,
-            assignedOperator: operator,
-            timeline: [
-              ...inc.timeline,
-              { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), event: `Assigned to ${operator}`, type: 'action' }
-            ]
-          };
-        }
-        return inc;
-      })
-    );
-  };
+  const handleIncidentAction = async (id: string, action: string, operator?: string) => {
+    const numericId = parseInt(id, 10);
+    if (isNaN(numericId)) return;
 
-  const investigateIncident = (id: string) => {
-    setIncidents(prev =>
-      prev.map(inc => {
-        if (inc.id === id) {
-          return {
-            ...inc,
-            status: 'INVESTIGATING',
-            timeline: [
-              ...inc.timeline,
-              { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), event: 'Operator initiated deep telemetry investigation', type: 'action' }
-            ]
-          };
-        }
-        return inc;
-      })
-    );
-  };
+    try {
+      const updated = await applyIncidentAction(numericId, {
+        action,
+        assignee: operator,
+        note: `Action ${action} executed by operator`,
+      });
 
-  const resolveIncident = (id: string) => {
-    setIncidents(prev =>
-      prev.map(inc => {
-        if (inc.id === id) {
-          return {
-            ...inc,
-            status: 'RESOLVED',
-            timeline: [
-              ...inc.timeline,
-              { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), event: 'Incident marked as RESOLVED by NOC Operator', type: 'action' }
-            ]
-          };
-        }
-        return inc;
-      })
-    );
-  };
-
-  const escalateIncident = (id: string) => {
-    setIncidents(prev =>
-      prev.map(inc => {
-        if (inc.id === id) {
-          return {
-            ...inc,
-            status: 'ESCALATED',
-            severity: 'CRITICAL',
-            timeline: [
-              ...inc.timeline,
-              { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), event: 'Escalated to Tier-3 Network Engineering Team', type: 'critical' }
-            ]
-          };
-        }
-        return inc;
-      })
-    );
-  };
-
-  const createIncident = (cellId: string) => {
-    const targetCell = cells.find(c => c.id === cellId);
-    const newId = `INC-${Math.floor(2050 + Math.random() * 100)}`;
-    const newInc: Incident = {
-      id: newId,
-      severity: targetCell?.status === 'critical' ? 'CRITICAL' : 'HIGH',
-      assetId: cellId,
-      region: targetCell?.region || 'Unknown',
-      detectedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      detectionSource: 'Manual Dispatch',
-      supportingDetection: 'SVM & DBSCAN Alert',
-      status: 'OPEN',
-      assignedOperator: 'NOC Operator 01',
-      timeline: [
-        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), event: `Incident manually dispatched for asset ${cellId}`, type: 'action' }
-      ]
-    };
-    setIncidents([newInc, ...incidents]);
-  };
-
-  const ingestNetworkData = (input: TelemetryFormInput) => {
-    let svmScore = 15;
-    let svmCat: 'Normal' | 'At Risk' = 'Normal';
-    let mainFactor = 'Optimal Baseline Telemetry';
-
-    if (input.latency > 100 || input.packetLoss > 5 || input.trafficLoad > 88 || input.callDropRate > 5) {
-      svmScore = Math.min(98.5, 85 + Math.random() * 12);
-      svmCat = 'At Risk';
-      mainFactor = input.latency > 100 ? 'High Latency Bottleneck' : input.packetLoss > 5 ? 'Severe Packet Loss' : 'Capacity Exhaustion';
-    } else if (input.latency > 60 || input.packetLoss > 2 || input.trafficLoad > 75) {
-      svmScore = Math.min(78, 50 + Math.random() * 20);
-      svmCat = 'Normal';
-      mainFactor = 'Elevated Load';
-    }
-
-    let dbscanClass: 'Normal' | 'Anomaly' = 'Normal';
-    let dbscanScore = 0.22;
-    if (input.latency > 115 || input.packetLoss > 6 || input.callDropRate > 4 || input.signalStrength < -103) {
-      dbscanClass = 'Anomaly';
-      dbscanScore = parseFloat((0.85 + Math.random() * 0.12).toFixed(2));
-    }
-
-    // Determine status for marker color: 🟢 Healthy | 🟡 Warning | 🔴 At Risk / Critical | 🟣 Anomaly
-    let status: AssetStatus = 'healthy';
-    if (dbscanClass === 'Anomaly') status = 'anomaly';
-    else if (svmCat === 'At Risk') status = 'critical';
-    else if (input.latency > 60 || input.packetLoss > 2 || input.trafficLoad > 75) status = 'warning';
-
-    const lat = input.latitude || 18.5204;
-    const lng = input.longitude || 73.8567;
-    const ts = input.timestamp || new Date().toLocaleString();
-
-    const newCell: NetworkCell = {
-      id: input.cellId,
-      name: `${input.location} ${input.assetType.toUpperCase()}`,
-      assetType: input.assetType,
-      region: input.location,
-      city: input.location,
-      lat,
-      lng,
-      users: input.connectedUsers,
-      latency: input.latency,
-      packetLoss: input.packetLoss,
-      trafficLoad: input.trafficLoad,
-      throughput: input.throughput,
-      signalStrength: input.signalStrength,
-      callDropRate: input.callDropRate,
-      resourceUtil: input.resourceUtil,
-      timestamp: ts,
-      status,
-      svmRiskScore: parseFloat(svmScore.toFixed(1)),
-      svmRiskCategory: svmCat,
-      svmMainFactor: mainFactor,
-      dbscanClassification: dbscanClass,
-      dbscanAnomalyScore: dbscanScore,
-      lastUpdated: 'Just now (Company Ingested)',
-      isCompanyIngested: true
-    };
-
-    setCells(prev => {
-      const idx = prev.findIndex(c => c.id.toLowerCase() === input.cellId.toLowerCase());
-      if (idx !== -1) {
-        const copy = [...prev];
-        copy[idx] = newCell;
-        return copy;
-      }
-      return [newCell, ...prev];
-    });
-
-    setSelectedCell(newCell);
-    setSubmittedCell(newCell);
-
-    // Trigger alert if critical/anomaly
-    if (status === 'critical' || status === 'anomaly') {
-      const newAlert: Alert = {
-        id: `ALT-${Math.floor(110 + Math.random() * 90)}`,
-        severity: 'critical',
-        title: `Company Data Alert: ${input.cellId}`,
-        assetId: input.cellId,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        detectionSource: svmCat === 'At Risk' ? 'SVM' : 'DBSCAN',
-        status: 'Open'
-      };
-      setAlerts(prev => [newAlert, ...prev]);
+      setIncidents((prev) =>
+        prev.map((inc) => (inc.id === id ? apiIncidentToUiIncident(updated) : inc))
+      );
+    } catch (err: any) {
+      alert(`Incident transition failed: ${err.message}`);
     }
   };
 
-  const [submittedCell, setSubmittedCell] = useState<NetworkCell | null>(INITIAL_CELLS[0]);
-  const [submittedRawInput, setSubmittedRawInput] = useState<TelemetryFormInput | null>(null);
-  const [submittedState, setSubmittedState] = useState<'idle' | 'submitted' | 'analyzed'>('analyzed');
-  const [activeWorkflowStep, setActiveWorkflowStep] = useState<number>(1);
+  const acknowledgeIncident = async (id: string) => {
+    await handleIncidentAction(id, 'acknowledge');
+  };
 
-  const submitCompanyData = (input: TelemetryFormInput) => {
+  const assignIncident = async (id: string, operator: string) => {
+    await handleIncidentAction(id, 'assign', operator);
+  };
+
+  const investigateIncident = async (id: string) => {
+    await handleIncidentAction(id, 'investigate');
+  };
+
+  const resolveIncident = async (id: string) => {
+    await handleIncidentAction(id, 'resolve');
+  };
+
+  const escalateIncident = async (id: string) => {
+    await handleIncidentAction(id, 'escalate');
+  };
+
+  const createIncident = (_cellId: string) => {
+    // Backend creates incidents automatically via the ingestion pipeline
+  };
+
+  const submitCompanyData = async (input: TelemetryFormInput) => {
     setSubmittedRawInput(input);
-    const draftCell: NetworkCell = {
-      id: input.cellId,
-      name: `${input.location} ${input.assetType.toUpperCase()}`,
-      assetType: input.assetType,
-      region: input.location,
-      city: input.location,
-      lat: input.latitude || 18.5204,
-      lng: input.longitude || 73.8567,
-      users: input.connectedUsers,
-      latency: input.latency,
-      packetLoss: input.packetLoss,
-      trafficLoad: input.trafficLoad,
-      throughput: input.throughput,
-      signalStrength: input.signalStrength,
-      callDropRate: input.callDropRate,
-      resourceUtil: input.resourceUtil,
-      timestamp: input.timestamp || new Date().toLocaleString(),
-      status: 'warning',
-      svmRiskScore: 0,
-      svmRiskCategory: 'Normal',
-      svmMainFactor: 'Pending AI Analysis',
-      dbscanClassification: 'Normal',
-      dbscanAnomalyScore: 0,
-      lastUpdated: 'Just now (Submitted)',
-      isCompanyIngested: true
-    };
-    setSubmittedCell(draftCell);
-    setSubmittedState('submitted');
-    setActiveWorkflowStep(1);
+    try {
+      const payload = {
+        Asset_ID: input.cellId || 'PREVIEW',
+        Asset_Type: input.assetType,
+        Latitude: input.latitude,
+        Longitude: input.longitude,
+        City: input.location,
+        Signal_Strength_dBm: input.signalStrength,
+        Latency_ms: input.latency,
+        Packet_Loss_pct: input.packetLoss,
+        Throughput_Mbps: input.throughput,
+        Connected_Users: input.connectedUsers,
+        Traffic_Load_pct: input.trafficLoad,
+        Call_Drop_Rate_pct: input.callDropRate,
+        Resource_Utilization_pct: input.resourceUtil,
+        Timestamp: input.timestamp || new Date().toISOString(),
+      };
+
+      // Preview mode
+      const res = await predictRecord(payload, false, false);
+      const previewCell = readingToNetworkCell(res.reading);
+      setSubmittedCell(previewCell);
+      setSelectedCell(previewCell);
+      setSubmittedState('submitted');
+      setActiveWorkflowStep(1);
+    } catch (err: any) {
+      alert(`Validation error: ${err.message}`);
+    }
   };
 
-  const runAiAnalysis = () => {
+  const runAiAnalysis = async () => {
+    if (!submittedRawInput && !submittedCell) return;
     const input = submittedRawInput || {
-      cellId: submittedCell?.id || 'MH-PN-102',
-      assetType: submittedCell?.assetType || 'cell',
+      cellId: submittedCell?.id || 'PREVIEW-NODE',
+      assetType: (submittedCell?.assetType as any) || 'cell',
       latitude: submittedCell?.lat || 18.5204,
       longitude: submittedCell?.lng || 73.8567,
-      location: submittedCell?.region || 'Pune',
-      signalStrength: submittedCell?.signalStrength || -104,
-      latency: submittedCell?.latency || 182,
-      packetLoss: submittedCell?.packetLoss || 11.8,
-      throughput: submittedCell?.throughput || 4.2,
-      connectedUsers: submittedCell?.users || 1820,
-      trafficLoad: submittedCell?.trafficLoad || 95,
-      callDropRate: submittedCell?.callDropRate || 6.2,
-resourceUtil: submittedCell?.resourceUtil || 96,
-      timestamp: submittedCell?.timestamp || '2026-09-15 17:38:12'
+      location: submittedCell?.city || 'Pune',
+      signalStrength: submittedCell?.signalStrength || -80,
+      latency: submittedCell?.latency || 45,
+      packetLoss: submittedCell?.packetLoss || 1.2,
+      throughput: submittedCell?.throughput || 100,
+      connectedUsers: submittedCell?.users || 200,
+      trafficLoad: submittedCell?.trafficLoad || 50,
+      callDropRate: submittedCell?.callDropRate || 1.0,
+      resourceUtil: submittedCell?.resourceUtil || 55,
+      timestamp: submittedCell?.timestamp || new Date().toISOString(),
     };
 
-    ingestNetworkData(input);
+    await ingestNetworkData(input);
     setSubmittedState('analyzed');
     setActiveWorkflowStep(2);
+  };
+
+  const ingestNetworkData = async (input: TelemetryFormInput) => {
+    const payload = {
+      Asset_ID: input.cellId,
+      Asset_Type: input.assetType,
+      Latitude: input.latitude,
+      Longitude: input.longitude,
+      City: input.location,
+      Signal_Strength_dBm: input.signalStrength,
+      Latency_ms: input.latency,
+      Packet_Loss_pct: input.packetLoss,
+      Throughput_Mbps: input.throughput,
+      Connected_Users: input.connectedUsers,
+      Traffic_Load_pct: input.trafficLoad,
+      Call_Drop_Rate_pct: input.callDropRate,
+      Resource_Utilization_pct: input.resourceUtil,
+      Timestamp: input.timestamp || new Date().toISOString(),
+    };
+
+    try {
+      const res = await predictRecord(payload, true, false);
+      const savedCell = readingToNetworkCell(res.reading);
+
+      setCells((prev) => {
+        const idx = prev.findIndex((c) => c.id.toLowerCase() === savedCell.id.toLowerCase());
+        if (idx !== -1) {
+          const copy = [...prev];
+          copy[idx] = savedCell;
+          return copy;
+        }
+        return [savedCell, ...prev];
+      });
+
+      setSelectedCell(savedCell);
+      setSubmittedCell(savedCell);
+
+      // Refresh overview stats and incidents in background
+      getStatsOverview().then(setStats).catch(() => {});
+      getIncidents({ page: 1, page_size: 50 }).then((inc) => {
+        setIncidents(inc.items.map(apiIncidentToUiIncident));
+      }).catch(() => {});
+    } catch (err: any) {
+      alert(`API Ingestion Error: ${err.message}`);
+    }
   };
 
   return (
@@ -343,6 +377,9 @@ resourceUtil: submittedCell?.resourceUtil || 96,
         links,
         alerts,
         incidents,
+        stats,
+        isLoading,
+        error,
         selectedCell,
         setSelectedCell,
         submittedCell,
@@ -354,6 +391,7 @@ resourceUtil: submittedCell?.resourceUtil || 96,
         lastTelemetryTime,
         searchQuery,
         setSearchQuery,
+        refreshData: loadData,
         acknowledgeIncident,
         assignIncident,
         investigateIncident,
@@ -363,7 +401,7 @@ resourceUtil: submittedCell?.resourceUtil || 96,
         findCellById,
         ingestNetworkData,
         submitCompanyData,
-        runAiAnalysis
+        runAiAnalysis,
       }}
     >
       {children}
