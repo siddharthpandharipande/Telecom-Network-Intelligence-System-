@@ -19,6 +19,7 @@ import { AlertsIncidents } from './pages/AlertsIncidents';
 import { NetworkAssets } from './pages/NetworkAssets';
 import { Analytics } from './pages/Analytics';
 import { Settings } from './pages/Settings';
+import { ModelCardPage } from './pages/ModelCardPage';
 
 export const App: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
@@ -62,6 +63,7 @@ export const App: React.FC = () => {
                   <Route path="/incidents" element={<AlertsIncidents />} />
                   <Route path="/assets" element={<NetworkAssets />} />
                   <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/model" element={<ModelCardPage />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </div>

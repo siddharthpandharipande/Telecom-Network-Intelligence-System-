@@ -10,7 +10,10 @@ import {
   Settings,
   Radio,
   Database,
-  ChevronRight
+  ChevronRight,
+  FileText,
+  BarChart3,
+  Radar
 } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 
@@ -37,8 +40,10 @@ export const Sidebar: React.FC<{ collapsed: boolean; toggleCollapse: () => void 
       items: [
         { label: 'Overview', path: '/', icon: <LayoutDashboard size={18} /> },
         { label: 'Data Ingestion', path: '/data-input', icon: <Database size={18} /> },
+        { label: 'Network Map', path: '/map', icon: <MapPin size={18} /> },
         { label: 'AI Diagnostics', path: '/svm', icon: <Brain size={18} /> },
-        { label: 'Live Network Map', path: '/map', icon: <MapPin size={18} /> },
+        { label: 'DBSCAN Anomalies', path: '/dbscan', icon: <Radar size={18} /> },
+        { label: 'Analytics', path: '/analytics', icon: <BarChart3 size={18} /> },
         {
           label: 'Alerts & Incidents',
           path: '/incidents',
@@ -53,6 +58,7 @@ export const Sidebar: React.FC<{ collapsed: boolean; toggleCollapse: () => void 
       items: [
         { label: 'Network Health', path: '/health', icon: <Activity size={18} /> },
         { label: 'Network Assets', path: '/assets', icon: <Server size={18} /> },
+        { label: 'Model Card', path: '/model', icon: <FileText size={18} /> },
         { label: 'Settings', path: '/settings', icon: <Settings size={18} /> },
       ]
     }
