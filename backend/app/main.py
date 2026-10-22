@@ -13,17 +13,22 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 
 from backend.app.db import SessionLocal, init_db
+from backend.app.manage_users import seed_demo_users_if_empty
 from backend.app.models import Reading
 from backend.app.routes import (
     analytics,
     assets,
+    auth,
     health,
     incidents,
     ingest,
     predict,
     stats,
+    streaming,
+    topology,
 )
 from backend.app.seed import seed_database
+from backend.app.seed_topology import seed_topology_links_if_empty
 from backend.app.settings import settings
 
 
@@ -38,6 +43,8 @@ async def lifespan(app: FastAPI):
             seed_database(db)
         else:
             print(f"[STARTUP] Database already initialized with {reading_count} readings.")
+    seed_demo_users_if_empty()
+    seed_topology_links_if_empty()
     yield
 
 
@@ -116,6 +123,9 @@ api_router.include_router(assets.router)
 api_router.include_router(stats.router)
 api_router.include_router(analytics.router)
 api_router.include_router(incidents.router)
+api_router.include_router(auth.router)
+api_router.include_router(topology.router)
+api_router.include_router(streaming.router)
 
 app.include_router(api_router)
 

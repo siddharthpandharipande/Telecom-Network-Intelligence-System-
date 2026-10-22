@@ -179,6 +179,8 @@ export interface MapPoint {
   is_anomaly: boolean;
   asset_type: string;
   city: string | null;
+  country?: string | null;
+  continent?: string | null;
 }
 
 export interface AssetDetail {
@@ -429,4 +431,157 @@ export interface PaginatedIncidents {
   total: number;
   page: number;
   page_size: number;
+}
+
+// ----------------------------------------------------------------------------
+// Authentication & RBAC Interfaces
+// ----------------------------------------------------------------------------
+export interface User {
+  id: number;
+  username: string;
+  full_name: string;
+  role: 'noc_analyst' | 'network_engineer' | 'admin' | string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  user_id: number;
+  username: string;
+  full_name: string;
+  role: string;
+  expires_at: string;
+}
+
+// ----------------------------------------------------------------------------
+// Network Topology Link Interfaces
+// ----------------------------------------------------------------------------
+export interface NetworkLink {
+  id: number;
+  link_id: string;
+  source_asset_id: string;
+  destination_asset_id: string;
+  source_lat: number | null;
+  source_lng: number | null;
+  dest_lat: number | null;
+  dest_lng: number | null;
+  source_city: string | null;
+  dest_city: string | null;
+  link_type: 'fiber' | 'microwave' | 'satellite' | string;
+  capacity_gbps: number;
+  utilization_pct: number;
+  status: 'up' | 'degraded' | 'down' | string;
+  is_synthetic: boolean;
+  created_at: string;
+}
+
+// ----------------------------------------------------------------------------
+// Simulated Replay Interfaces
+// ----------------------------------------------------------------------------
+export interface ReplayMeta {
+  start_time: string;
+  end_time: string;
+  distinct_hours: number[];
+  total_readings: number;
+  is_snapshot: boolean;
+  snapshot_date: string;
+}
+
+export interface ReplaySlice {
+  hour: number;
+  timestamp_sample: string;
+  count: number;
+  readings: MapPoint[];
+}
+
+// ----------------------------------------------------------------------------
+// Network Health Dashboard Interfaces
+// ----------------------------------------------------------------------------
+export interface HealthDashboardKPIs {
+  total_assets: number;
+  normal_assets: number;
+  at_risk_assets: number;
+  at_risk_pct: number;
+  anomaly_count: number;
+  anomaly_pct: number;
+  availability_pct: number;
+  avg_signal_strength_dbm: number;
+  avg_latency_ms: number;
+  avg_packet_loss_pct: number;
+  avg_traffic_load_pct: number;
+  avg_resource_utilization_pct: number;
+  avg_nsi: number;
+  aggregate_health_score: number;
+  health_category: 'Healthy' | 'Warning' | 'Critical' | string;
+}
+
+export interface HealthDashboardData {
+  kpis: HealthDashboardKPIs;
+  charts: {
+    svm_distribution: Array<{ name: string; value: number; color: string }>;
+    dbscan_distribution: Array<{ name: string; value: number; color: string }>;
+    nsi_distribution: Array<{ bin: string; count: number }>;
+    latency_packet_loss: Array<{
+      asset_type: string;
+      latency_ms: number;
+      packet_loss_pct: number;
+      traffic_load_pct: number;
+      resource_util_pct: number;
+      total: number;
+      at_risk: number;
+    }>;
+    signal_distribution: Array<{ tier: string; count: number }>;
+    risk_by_region: Array<{ region: string; total: number; at_risk: number; optimal: number }>;
+  };
+  documentation: {
+    nsi_formula: string;
+    health_score_formula: string;
+    availability_note: string;
+    data_scope: string;
+  };
+  filter_options: {
+    countries: string[];
+    continents: string[];
+    cities: string[];
+    asset_types: string[];
+    hierarchy?: Record<string, Record<string, string[]>>;
+    country_to_continent?: Record<string, string>;
+  };
+  timestamp: string;
+}
+
+export interface HealthLocationsResponse {
+  continents: string[];
+  countries: string[];
+  cities: string[];
+  hierarchy: Record<string, Record<string, string[]>>;
+  country_to_continent?: Record<string, string>;
+}
+
+// ----------------------------------------------------------------------------
+// Historical Analytics Trends Interfaces
+// ----------------------------------------------------------------------------
+export interface HistoricalTrendPoint {
+  timestamp: string;
+  date: string;
+  hour: number;
+  avg_latency: number;
+  avg_packet_loss: number;
+  avg_traffic: number;
+  avg_resource: number;
+  avg_nsi: number;
+  avg_signal: number;
+  at_risk_count: number;
+  anomaly_count: number;
+  reading_count: number;
+}
+
+export interface HistoricalTrendsData {
+  timeline: HistoricalTrendPoint[];
+  available_range: {
+    min_date: string | null;
+    max_date: string | null;
+  };
+  coverage_note: string;
 }

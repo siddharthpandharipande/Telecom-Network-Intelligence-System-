@@ -6,53 +6,83 @@ import {
   CorrelationData,
   DbscanExploreResponse,
   DistributionsData,
+  HealthDashboardData,
+  HealthLocationsResponse,
   HealthResponse,
+  HistoricalTrendsData,
   HourlyData,
   Incident,
   IngestionLogItem,
   IngestionReport,
+  LoginResponse,
   MapPoint,
   ModelCard,
+  NetworkLink,
   PaginatedAssets,
   PaginatedIncidents,
   PredictResponse,
+  ReplayMeta,
   ReplayResponse,
+  ReplaySlice,
   RiskAnomalyMatrix,
   ScatterPoint,
   StatsOverview,
   SystemConfig,
+  User,
 } from '../types/api';
 
-const API_BASE_URL = ((import.meta as any).env?.VITE_API_BASE_URL as string) || 'http://localhost:8000';
+const API_BASE_URL = ((import.meta as any).env?.VITE_API_BASE_URL as string) ?? '';
 
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   const headers = new Headers(options.headers || {});
 
+  // Automatically attach stored session Bearer token if present
+  const storedToken = localStorage.getItem('nexusnet_token');
+  if (storedToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${storedToken}`);
+  }
+
   if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
 
-  if (!response.ok) {
-    let errorPayload: ApiErrorPayload;
-    try {
-      errorPayload = await response.json();
-    } catch {
-      errorPayload = {
-        detail: `Request failed with status ${response.status}`,
-        code: 'HTTP_ERROR',
-        errors: [response.statusText],
-      };
+    if (!response.ok) {
+      let errorPayload: ApiErrorPayload;
+      try {
+        errorPayload = await response.json();
+      } catch {
+        errorPayload = {
+          detail: `Request failed with status ${response.status}`,
+          code: 'HTTP_ERROR',
+          errors: [response.statusText],
+        };
+      }
+      throw new ApiError(errorPayload, response.statusText);
     }
-    throw new ApiError(errorPayload, response.statusText);
-  }
 
-  return response.json() as Promise<T>;
+    return response.json() as Promise<T>;
+  } catch (err: any) {
+    // If relative proxy fetch failed and no base URL was set, fallback directly to 127.0.0.1:8000
+    if (!API_BASE_URL && !url.startsWith('http')) {
+      const fallbackUrl = `http://127.0.0.1:8000${endpoint}`;
+      try {
+        const fbRes = await fetch(fallbackUrl, { ...options, headers });
+        if (fbRes.ok) {
+          return fbRes.json() as Promise<T>;
+        }
+      } catch {
+        // Fallback also failed, propagate original error
+      }
+    }
+    throw err;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -111,6 +141,7 @@ export async function getIngestionLogs(limit: number = 20): Promise<IngestionLog
 
 export async function getAssets(params: {
   country?: string;
+  continent?: string;
   city?: string;
   asset_type?: string;
   status?: string;
@@ -123,6 +154,7 @@ export async function getAssets(params: {
   sort?: string;
 } = {}): Promise<PaginatedAssets> {
   const query = new URLSearchParams();
+  if (params.continent) query.set('continent', params.continent);
   if (params.country) query.set('country', params.country);
   if (params.city) query.set('city', params.city);
   if (params.asset_type) query.set('asset_type', params.asset_type);
@@ -140,6 +172,7 @@ export async function getAssets(params: {
 
 export async function getMapPoints(params: {
   country?: string;
+  continent?: string;
   city?: string;
   asset_type?: string;
   status?: string;
@@ -149,6 +182,7 @@ export async function getMapPoints(params: {
   q?: string;
 } = {}): Promise<MapPoint[]> {
   const query = new URLSearchParams();
+  if (params.continent) query.set('continent', params.continent);
   if (params.country) query.set('country', params.country);
   if (params.city) query.set('city', params.city);
   if (params.asset_type) query.set('asset_type', params.asset_type);
@@ -261,3 +295,159 @@ export async function applyIncidentAction(
     body: JSON.stringify(payload),
   });
 }
+
+// ----------------------------------------------------------------------------
+// Authentication & RBAC API Endpoints
+// ----------------------------------------------------------------------------
+export async function loginUser(credentials: { username: string; password: string }): Promise<LoginResponse> {
+  const data = await apiFetch<LoginResponse>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+  });
+  localStorage.setItem('nexusnet_token', data.token);
+  localStorage.setItem('nexusnet_user', JSON.stringify(data));
+  return data;
+}
+
+export async function logoutUser(): Promise<{ message: string; status: string }> {
+  try {
+    return await apiFetch<{ message: string; status: string }>('/api/auth/logout', {
+      method: 'POST',
+    });
+  } finally {
+    localStorage.removeItem('nexusnet_token');
+    localStorage.removeItem('nexusnet_user');
+  }
+}
+
+export async function getCurrentUser(): Promise<User> {
+  return apiFetch<User>('/api/auth/me');
+}
+
+export async function listAllUsers(): Promise<User[]> {
+  return apiFetch<User[]>('/api/auth/users');
+}
+
+// ----------------------------------------------------------------------------
+// Topology Links API Endpoints
+// ----------------------------------------------------------------------------
+export async function getTopologyLinks(params: {
+  link_type?: string;
+  status?: string;
+} = {}): Promise<NetworkLink[]> {
+  const query = new URLSearchParams();
+  if (params.link_type) query.set('link_type', params.link_type);
+  if (params.status) query.set('status', params.status);
+  return apiFetch<NetworkLink[]>(`/api/topology/links?${query.toString()}`);
+}
+
+export async function createTopologyLink(payload: {
+  link_id: string;
+  source_asset_id: string;
+  destination_asset_id: string;
+  link_type?: string;
+  capacity_gbps?: number;
+  utilization_pct?: number;
+  status?: string;
+}): Promise<NetworkLink> {
+  return apiFetch<NetworkLink>('/api/topology/links', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Simulated Replay API Endpoints
+// ----------------------------------------------------------------------------
+export async function getReplayMeta(): Promise<ReplayMeta> {
+  return apiFetch<ReplayMeta>('/api/replay/meta');
+}
+
+export async function getReplaySlice(hour: number): Promise<ReplaySlice> {
+  return apiFetch<ReplaySlice>(`/api/replay/slice?hour=${hour}`);
+}
+
+// ----------------------------------------------------------------------------
+// Network Health Dashboard & Locations API Endpoints
+// ----------------------------------------------------------------------------
+export async function getHealthLocations(): Promise<HealthLocationsResponse> {
+  return apiFetch<HealthLocationsResponse>('/api/health/locations');
+}
+
+export async function getHealthDashboard(params: {
+  country?: string;
+  continent?: string;
+  city?: string;
+  asset_type?: string;
+  status?: string;
+  is_at_risk?: boolean;
+  is_anomaly?: boolean;
+} = {}): Promise<HealthDashboardData> {
+  const query = new URLSearchParams();
+  if (params.country && params.country !== 'All') query.set('country', params.country);
+  if (params.continent && params.continent !== 'All') query.set('continent', params.continent);
+  if (params.city && params.city !== 'All') query.set('city', params.city);
+  if (params.asset_type && params.asset_type !== 'All') query.set('asset_type', params.asset_type);
+  if (params.status && params.status !== 'All') query.set('status', params.status);
+  if (params.is_at_risk !== undefined) query.set('is_at_risk', String(params.is_at_risk));
+  if (params.is_anomaly !== undefined) query.set('is_anomaly', String(params.is_anomaly));
+
+  return apiFetch<HealthDashboardData>(`/api/health/dashboard?${query.toString()}`);
+}
+
+// ----------------------------------------------------------------------------
+// Historical Analytics Trends API Endpoint
+// ----------------------------------------------------------------------------
+export async function getHistoricalTrends(params: {
+  start_date?: string;
+  end_date?: string;
+  asset_id?: string;
+} = {}): Promise<HistoricalTrendsData> {
+  const query = new URLSearchParams();
+  if (params.start_date) query.set('start_date', params.start_date);
+  if (params.end_date) query.set('end_date', params.end_date);
+  if (params.asset_id) query.set('asset_id', params.asset_id);
+
+  return apiFetch<HistoricalTrendsData>(`/api/analytics/history?${query.toString()}`);
+}
+
+// ----------------------------------------------------------------------------
+// Reverse Geolocation Coordinate Lookup
+// ----------------------------------------------------------------------------
+export async function getGeoLookup(lat: number, lng: number): Promise<{
+  continent: string | null;
+  country: string | null;
+  city: string | null;
+  region: string | null;
+  distance_km?: number | null;
+}> {
+  return apiFetch<{
+    continent: string | null;
+    country: string | null;
+    city: string | null;
+    region: string | null;
+    distance_km?: number | null;
+  }>(`/api/geo/lookup?lat=${lat}&lng=${lng}`);
+}
+
+export async function searchGeoLocation(query: string): Promise<Array<{
+  city: string;
+  country: string;
+  region: string;
+  continent: string;
+  latitude: number;
+  longitude: number;
+  label: string;
+}>> {
+  return apiFetch<Array<{
+    city: string;
+    country: string;
+    region: string;
+    continent: string;
+    latitude: number;
+    longitude: number;
+    label: string;
+  }>>(`/api/geo/search?q=${encodeURIComponent(query)}`);
+}
+
+

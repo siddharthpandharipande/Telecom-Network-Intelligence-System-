@@ -110,16 +110,16 @@ def get_stats_overview(db: Session = Depends(get_db)) -> Dict[str, Any]:
 
     # Average metrics
     avg_query = select(
-        func.avg(Reading.signal_strength_dbm),
-        func.avg(Reading.latency_ms),
-        func.avg(Reading.packet_loss_pct),
-        func.avg(Reading.throughput_mbps),
-        func.avg(Reading.connected_users),
-        func.avg(Reading.traffic_load_pct),
-        func.avg(Reading.call_drop_rate_pct),
-        func.avg(Reading.resource_utilization_pct),
-        func.avg(Reading.network_stress_index),
-        func.avg(Reading.signal_quality_score),
+        func.avg(latest_readings_subq.c.signal_strength_dbm),
+        func.avg(latest_readings_subq.c.latency_ms),
+        func.avg(latest_readings_subq.c.packet_loss_pct),
+        func.avg(latest_readings_subq.c.throughput_mbps),
+        func.avg(latest_readings_subq.c.connected_users),
+        func.avg(latest_readings_subq.c.traffic_load_pct),
+        func.avg(latest_readings_subq.c.call_drop_rate_pct),
+        func.avg(latest_readings_subq.c.resource_utilization_pct),
+        func.avg(latest_readings_subq.c.network_stress_index),
+        func.avg(latest_readings_subq.c.signal_quality_score),
     ).select_from(latest_readings_subq)
     avg_res = db.execute(avg_query).one()
 

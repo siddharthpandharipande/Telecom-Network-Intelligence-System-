@@ -18,7 +18,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ isOnline, onRetry,
       <div className="flex items-center gap-2 max-w-4xl mx-auto">
         <AlertTriangle size={18} className="flex-shrink-0 text-white" />
         <span>
-          Backend offline: showing no data, actions disabled (unable to reach FastAPI server at http://localhost:8000)
+          Backend offline: showing no data, actions disabled (unable to reach FastAPI server at http://127.0.0.1:8000)
         </span>
       </div>
       {onRetry && (

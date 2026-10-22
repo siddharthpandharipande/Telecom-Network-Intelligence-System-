@@ -20,6 +20,8 @@ import {
   RefreshCw,
   Sliders,
   AlertTriangle,
+  Search,
+  Compass,
 } from 'lucide-react';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { useTelemetry } from '../context/TelemetryContext';
@@ -138,6 +140,34 @@ export const DBSCANAnomaly: React.FC = () => {
     };
   }, [selectedAssetId]);
 
+  // Search state
+  const [assetSearchInput, setAssetSearchInput] = useState<string>('');
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const handleAssetSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = assetSearchInput.trim();
+    if (!query) return;
+    setSearchError(null);
+    setLoadingDetail(true);
+    try {
+      const data = await getAssetDetail(query);
+      setInspectedDetail(data);
+      setSelectedAssetId(data.asset.asset_id);
+    } catch (err: any) {
+      setSearchError(err.message || `Asset '${query}' was not found in the database.`);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  const handleQuickSelect = (aid: string) => {
+    setAssetSearchInput(aid);
+    setSearchError(null);
+    setSelectedAssetId(aid);
+  };
+
+
   const xOption = useMemo(
     () => METRIC_OPTIONS.find((m) => m.key === xMetric) || METRIC_OPTIONS[0],
     [xMetric]
@@ -213,6 +243,82 @@ export const DBSCANAnomaly: React.FC = () => {
         </div>
       </div>
 
+      {/* Asset ID Search & Anomaly Inspector Input Bar */}
+      <div className="p-4 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Search size={16} className="text-purple-500" />
+              <span>Inspect Anomaly Status by Asset ID</span>
+            </h2>
+            <p className="text-[11px] text-slate-500">
+              Input any telecom Asset ID to display its DBSCAN density cluster, nearest core distance, and anomaly classification.
+            </p>
+          </div>
+          {loadingDetail && (
+            <span className="text-xs text-purple-500 flex items-center gap-1.5 animate-pulse">
+              <RefreshCw size={12} className="animate-spin" /> Fetching asset details...
+            </span>
+          )}
+        </div>
+
+        <form onSubmit={handleAssetSearch} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={assetSearchInput}
+              onChange={(e) => {
+                setAssetSearchInput(e.target.value);
+                if (searchError) setSearchError(null);
+              }}
+              placeholder="Enter Asset ID (e.g., SA-COL-BOG-DC-BS-00378, AS-IND-MUM-MH-BS-09999, MH-PN-999)..."
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={!assetSearchInput.trim() || loadingDetail}
+            className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 flex-shrink-0"
+          >
+            <Activity size={14} />
+            <span>Inspect Anomaly</span>
+          </button>
+        </form>
+
+        {searchError && (
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
+            <AlertTriangle size={14} className="flex-shrink-0" />
+            <span>{searchError}</span>
+          </div>
+        )}
+
+        {/* Quick sample chips */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-slate-500">
+          <span className="font-medium mr-1">Quick Samples:</span>
+          {[
+            'SA-COL-BOG-DC-BS-00378',
+            'AS-IND-MUM-MH-BS-09999',
+            'NA-USA-NYC-NY-RT-01200',
+            'EU-FRA-PAR-ID-BS-00140',
+            'AF-ZAF-JNB-GT-RT-00088',
+          ].map((sampleId) => (
+            <button
+              key={sampleId}
+              type="button"
+              onClick={() => handleQuickSelect(sampleId)}
+              className={`px-2 py-0.5 rounded-md font-mono text-[10px] transition-colors border ${
+                selectedAssetId === sampleId
+                  ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300 border-purple-500/50 font-bold'
+                  : 'bg-slate-100 dark:bg-slate-900/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-purple-400'
+              }`}
+            >
+              {sampleId}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Selected Asset Diagnostic Box */}
       {latestReading && (
         <div className="p-6 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm space-y-5">
@@ -280,8 +386,77 @@ export const DBSCANAnomaly: React.FC = () => {
             </div>
           </div>
 
+          {/* 8-Dimensional Telemetry Telemetry Breakdown */}
+          <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700/80">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center justify-between">
+              <span>Underlying 8-Dimensional Telemetry Profile</span>
+              <span className="font-mono text-purple-500 font-semibold lowercase">
+                sampled at {latestReading.timestamp.replace('T', ' ')}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2 text-center text-[11px]">
+              <div className="p-2 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-slate-400 text-[10px]">Signal (RSRP)</div>
+                <div className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                  {latestReading.signal_strength_dbm} dBm
+                </div>
+              </div>
+              <div className="p-2 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-slate-400 text-[10px]">Latency</div>
+                <div className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                  {latestReading.latency_ms} ms
+                </div>
+              </div>
+              <div className="p-2 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-slate-400 text-[10px]">Packet Loss</div>
+                <div className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                  {latestReading.packet_loss_pct}%
+                </div>
+              </div>
+              <div className="p-2 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-slate-400 text-[10px]">Throughput</div>
+                <div className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                  {latestReading.throughput_mbps} Mbps
+                </div>
+              </div>
+              <div className="p-2 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-slate-400 text-[10px]">Users</div>
+                <div className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                  {latestReading.connected_users}
+                </div>
+              </div>
+              <div className="p-2 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-slate-400 text-[10px]">Traffic Load</div>
+                <div className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                  {latestReading.traffic_load_pct}%
+                </div>
+              </div>
+              <div className="p-2 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-slate-400 text-[10px]">Call Drop Rate</div>
+                <div className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                  {latestReading.call_drop_rate_pct}%
+                </div>
+              </div>
+              <div className="p-2 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60">
+                <div className="text-slate-400 text-[10px]">Resource Util</div>
+                <div className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                  {latestReading.resource_utilization_pct}%
+                </div>
+              </div>
+            </div>
+          </div>
+
+
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-3 pt-1">
+            <button
+              onClick={() => navigate(`/map?asset=${encodeURIComponent(latestReading.asset_id)}&locate_distance=1`)}
+              className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+              title="Locate distance connecting this anomalous asset with its nearest Core Node on the live map"
+            >
+              <Compass size={14} />
+              <span>Locate Distance</span>
+            </button>
             <button
               onClick={() => navigate(`/map?asset=${encodeURIComponent(latestReading.asset_id)}`)}
               className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
@@ -494,9 +669,18 @@ export const DBSCANAnomaly: React.FC = () => {
                     Latency: {c.latency_ms.toFixed(0)}ms &bull; Loss: {c.packet_loss_pct.toFixed(1)}% &bull; Load: {c.traffic_load_pct.toFixed(0)}%
                   </div>
                   <div className="flex items-center justify-between mt-2 pt-1 border-t border-slate-200 dark:border-slate-800 text-[11px]">
-                    <span className="text-slate-400 font-mono">
-                      Dist: {c.nearest_core_distance?.toFixed(2) ?? 'N/A'}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/map?asset=${encodeURIComponent(c.asset_id)}&locate_distance=1`);
+                      }}
+                      className="text-purple-600 dark:text-purple-400 hover:text-purple-500 font-semibold font-mono flex items-center gap-1 hover:underline"
+                      title="Measure distance to core node on network map"
+                    >
+                      <Compass size={11} />
+                      <span>Dist: {c.nearest_core_distance?.toFixed(2) ?? 'N/A'}</span>
+                    </button>
                     <span
                       className={`font-semibold ${
                         c.is_at_risk ? 'text-red-500' : 'text-emerald-500'

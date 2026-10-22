@@ -107,6 +107,22 @@ def predict_record(
             )
 
         reading_schema = reading_to_response(reading_orm)
+        try:
+            from backend.app.routes.streaming import broadcast_telemetry_event_sync
+            broadcast_telemetry_event_sync({
+                "asset_id": reading_schema.asset_id,
+                "status": reading_schema.status,
+                "risk_score": reading_schema.risk_score,
+                "is_at_risk": reading_schema.is_at_risk,
+                "is_anomaly": reading_schema.is_anomaly,
+                "latency_ms": reading_schema.latency_ms,
+                "traffic_load_pct": reading_schema.traffic_load_pct,
+                "city": reading_schema.city,
+                "timestamp": reading_schema.timestamp.isoformat(),
+            })
+        except Exception:
+            pass
+
         return {
             "reading": reading_schema,
             "validation": {

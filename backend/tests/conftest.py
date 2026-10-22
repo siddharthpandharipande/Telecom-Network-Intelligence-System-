@@ -10,8 +10,10 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.db import get_db
 from backend.app.main import app
+from backend.app.manage_users import seed_demo_users_if_empty
 from backend.app.models import Base
 from backend.app.seed import seed_database
+from backend.app.seed_topology import seed_topology_links_if_empty
 
 
 @pytest.fixture(scope="session")
@@ -39,6 +41,8 @@ def test_db(test_engine, TestingSessionLocal) -> Generator[Session, None, None]:
     session = TestingSessionLocal()
     # Initial seed for testing
     seed_database(session=session, force_reseed=True)
+    seed_demo_users_if_empty(db=session)
+    seed_topology_links_if_empty(db=session)
     try:
         yield session
     finally:

@@ -322,13 +322,35 @@ def validate_and_prepare_records(
             else "Unknown"
         )
         record["Continent"] = (
-            str(row.get("Continent")).strip() if not pd.isna(row.get("Continent")) else None
+            str(row.get("Continent")).strip() if not pd.isna(row.get("Continent")) and str(row.get("Continent")).strip() != "" and str(row.get("Continent")).strip() != "None" else None
         )
         record["Country"] = (
-            str(row.get("Country")).strip() if not pd.isna(row.get("Country")) else None
+            str(row.get("Country")).strip() if not pd.isna(row.get("Country")) and str(row.get("Country")).strip() != "" and str(row.get("Country")).strip() != "None" else None
         )
-        record["City"] = str(row.get("City")).strip() if not pd.isna(row.get("City")) else None
-        record["Region"] = str(row.get("Region")).strip() if not pd.isna(row.get("Region")) else None
+        record["City"] = str(row.get("City")).strip() if not pd.isna(row.get("City")) and str(row.get("City")).strip() != "" and str(row.get("City")).strip() != "None" else None
+        record["Region"] = str(row.get("Region")).strip() if not pd.isna(row.get("Region")) and str(row.get("Region")).strip() != "" and str(row.get("Region")).strip() != "None" else None
+
+        # Automatic reverse geolocation from GPS coordinates (lat, lon)
+        if lat_val is not None and lng_val is not None:
+            from backend.app.geo import resolve_location_from_coords
+            geo_info = resolve_location_from_coords(lat_val, lng_val)
+            dist_val = geo_info.get("distance_km")
+            # If coordinates are near a known hub (<= 25km) or reverse geocoded with confidence,
+            # or if location fields were omitted/stale, update them with the accurate GPS location.
+            is_high_confidence = (dist_val is not None and dist_val <= 25.0) or (dist_val == 0.0)
+            if geo_info.get("city") and (not record["City"] or is_high_confidence):
+                record["City"] = geo_info["city"]
+            if geo_info.get("country") and (not record["Country"] or is_high_confidence):
+                record["Country"] = geo_info["country"]
+            if geo_info.get("continent") and (not record["Continent"] or is_high_confidence):
+                record["Continent"] = geo_info["continent"]
+            if geo_info.get("region") and (not record["Region"] or is_high_confidence):
+                record["Region"] = geo_info["region"]
+
+        # Smart continent inference from country if still omitted
+        if not record["Continent"] and record["Country"]:
+            from backend.app.geo import infer_continent_from_country
+            record["Continent"] = infer_continent_from_country(record["Country"]) or "Other"
 
         if reasons:
             rejected_rows.append({"row": row_num, "reasons": reasons})
@@ -501,15 +523,15 @@ def process_ingestion(
             if row["Latitude"] is not None and row["Longitude"] is not None:
                 asset.latitude = float(row["Latitude"])
                 asset.longitude = float(row["Longitude"])
-            if row["Asset_Type"] != "Unknown" and asset.asset_type == "Unknown":
+            if row["Asset_Type"] != "Unknown":
                 asset.asset_type = row["Asset_Type"]
-            if row["Continent"] and not asset.continent:
+            if row["Continent"]:
                 asset.continent = row["Continent"]
-            if row["Country"] and not asset.country:
+            if row["Country"]:
                 asset.country = row["Country"]
-            if row["City"] and not asset.city:
+            if row["City"]:
                 asset.city = row["City"]
-            if row["Region"] and not asset.region:
+            if row["Region"]:
                 asset.region = row["Region"]
             asset.updated_at = now
         else:

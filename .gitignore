@@ -20,7 +20,8 @@ __pycache__/
 env/
 venv/
 *.pkl
-backend/data/*.db
+*.db
+*.sqlite*
 backend/data/
 
 

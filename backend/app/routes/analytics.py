@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 
 from backend.app.db import get_db
 from backend.app.models import Asset, Reading
-from backend.app.schemas import ReadingResponse, ReplayResponse
+from backend.app.schemas import (
+    ReadingResponse,
+    ReplayHourResponse,
+    ReplayMetaResponse,
+    ReplayResponse,
+)
 from backend.app.utils import reading_to_response
 
 router = APIRouter(tags=["Analytics"])
@@ -428,4 +433,233 @@ def get_replay_readings(
         "items": items,
         "next_cursor": next_cursor,
         "has_more": has_more,
+    }
+
+
+@router.get("/replay/meta", response_model=ReplayMetaResponse)
+def get_replay_meta(db: Session = Depends(get_db)):
+    """Retrieve metadata about available timestamps for historical simulated replay."""
+    min_ts = db.scalar(select(func.min(Reading.timestamp)))
+    max_ts = db.scalar(select(func.max(Reading.timestamp)))
+    total = db.scalar(select(func.count(Reading.id))) or 0
+
+    hours = [
+        int(h[0])
+        for h in db.execute(
+            select(func.strftime("%H", Reading.timestamp))
+            .where(func.date(Reading.timestamp) == "2026-09-16")
+            .distinct()
+            .order_by(func.strftime("%H", Reading.timestamp).asc())
+        ).all()
+    ]
+
+    return ReplayMetaResponse(
+        start_time=min_ts.isoformat() if min_ts else "2026-09-16T00:00:00",
+        end_time=max_ts.isoformat() if max_ts else "2026-09-16T23:00:00",
+        distinct_hours=hours if hours else list(range(24)),
+        total_readings=total,
+        is_snapshot=True,
+        snapshot_date="2026-09-16",
+    )
+
+
+@router.get("/replay/slice", response_model=ReplayHourResponse)
+def get_replay_slice(
+    hour: int = Query(0, ge=0, le=23, description="Hour of the day to replay (0-23)"),
+    db: Session = Depends(get_db),
+):
+    """Retrieve simulated telemetry slice for a specific hour of historical replay.
+
+    Includes all global network assets modulated by realistic diurnal telecom traffic curves:
+    - Low nighttime load (00-06h): predominantly healthy (green)
+    - Morning and evening peak loads (08-11h, 18-21h): elevated stress, warnings (yellow), and at-risk incidents (red/purple).
+    """
+    from backend.app.schemas import MapPoint
+
+    query = (
+        select(
+            Asset.asset_id,
+            Asset.latitude,
+            Asset.longitude,
+            Reading.status,
+            Reading.is_at_risk,
+            Reading.is_anomaly,
+            Asset.asset_type,
+            Asset.city,
+        )
+        .select_from(Asset)
+        .join(Reading, Asset.latest_reading_id == Reading.id)
+        .where(
+            Asset.latitude.is_not(None),
+            Asset.longitude.is_not(None),
+        )
+    )
+    records = db.execute(query).all()
+    points = []
+    ts_sample = f"2026-09-16T{hour:02d}:00:00"
+
+    # Diurnal peak factor: 0.1 (night) to 1.0 (peak hours)
+    if 8 <= hour <= 11:
+        peak_factor = 0.65 + (hour - 8) * 0.08
+    elif 18 <= hour <= 21:
+        peak_factor = 0.75 + (hour - 18) * 0.08
+    elif 12 <= hour <= 17:
+        peak_factor = 0.45
+    elif 22 <= hour or hour <= 6:
+        peak_factor = 0.10
+    else:
+        peak_factor = 0.35
+
+    for r in records:
+        # Deterministic integer hash per asset and hour for stable, smooth temporal variation
+        h_val = (abs(hash(r.asset_id)) ^ (hour * 7919)) % 1000 / 1000.0
+
+        status = r.status
+        is_at_risk = bool(r.is_at_risk)
+        is_anomaly = bool(r.is_anomaly)
+
+        # Modulate status according to diurnal traffic wave
+        if peak_factor >= 0.6:
+            # High peak hours: elevated latency, packet drop and congestion
+            if h_val < (0.14 * peak_factor):
+                status = "red"
+                is_at_risk = True
+                is_anomaly = False
+            elif h_val < (0.32 * peak_factor):
+                status = "yellow"
+                is_at_risk = False
+                is_anomaly = False
+            elif h_val < (0.38 * peak_factor):
+                status = "purple"
+                is_anomaly = True
+                is_at_risk = False
+            else:
+                status = "green"
+                is_at_risk = False
+                is_anomaly = False
+        elif peak_factor <= 0.15:
+            # Nighttime low load: 96%+ green optimal baseline
+            if h_val < 0.02:
+                status = "yellow"
+                is_at_risk = False
+                is_anomaly = False
+            elif h_val < 0.03:
+                status = "purple"
+                is_anomaly = True
+                is_at_risk = False
+            elif h_val < 0.04:
+                status = "red"
+                is_at_risk = True
+                is_anomaly = False
+            else:
+                status = "green"
+                is_at_risk = False
+                is_anomaly = False
+        else:
+            # Mid-day nominal load
+            if h_val < 0.07:
+                status = "red"
+                is_at_risk = True
+                is_anomaly = False
+            elif h_val < 0.20:
+                status = "yellow"
+                is_at_risk = False
+                is_anomaly = False
+            elif h_val < 0.25:
+                status = "purple"
+                is_anomaly = True
+                is_at_risk = False
+            else:
+                status = "green"
+                is_at_risk = False
+                is_anomaly = False
+
+        points.append(
+            MapPoint(
+                asset_id=r.asset_id,
+                latitude=float(r.latitude),
+                longitude=float(r.longitude),
+                status=status,
+                is_at_risk=is_at_risk,
+                is_anomaly=is_anomaly,
+                asset_type=r.asset_type,
+                city=r.city,
+            )
+        )
+
+    return ReplayHourResponse(
+        hour=hour,
+        timestamp_sample=ts_sample,
+        count=len(points),
+        readings=points,
+    )
+
+
+
+@router.get("/analytics/history")
+def get_historical_trends(
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    asset_id: Optional[str] = Query(None, description="Specific asset ID filter"),
+    db: Session = Depends(get_db),
+):
+    """Retrieve chronological multi-day / hourly historical telemetry trends and prediction history."""
+    query = select(
+        func.date(Reading.timestamp).label("date"),
+        func.strftime("%H", Reading.timestamp).label("hour"),
+        func.avg(Reading.latency_ms).label("avg_latency"),
+        func.avg(Reading.packet_loss_pct).label("avg_packet_loss"),
+        func.avg(Reading.traffic_load_pct).label("avg_traffic"),
+        func.avg(Reading.resource_utilization_pct).label("avg_resource"),
+        func.avg(Reading.network_stress_index).label("avg_nsi"),
+        func.avg(Reading.signal_strength_dbm).label("avg_signal"),
+        func.sum(case((Reading.is_at_risk == True, 1), else_=0)).label("at_risk_count"),
+        func.sum(case((Reading.is_anomaly == True, 1), else_=0)).label("anomaly_count"),
+        func.count().label("reading_count"),
+    )
+    if start_date:
+        query = query.where(func.date(Reading.timestamp) >= start_date)
+    if end_date:
+        query = query.where(func.date(Reading.timestamp) <= end_date)
+    if asset_id:
+        query = query.where(Reading.asset_id == asset_id.strip())
+
+    query = query.group_by(
+        func.date(Reading.timestamp), func.strftime("%H", Reading.timestamp)
+    ).order_by(
+        func.date(Reading.timestamp).asc(), func.strftime("%H", Reading.timestamp).asc()
+    )
+
+    records = db.execute(query).all()
+    timeline = []
+    for r in records:
+        d_str = r.date
+        h_str = r.hour or "00"
+        timeline.append(
+            {
+                "timestamp": f"{d_str}T{h_str}:00:00",
+                "date": d_str,
+                "hour": int(h_str),
+                "avg_latency": round(float(r.avg_latency or 0.0), 1),
+                "avg_packet_loss": round(float(r.avg_packet_loss or 0.0), 2),
+                "avg_traffic": round(float(r.avg_traffic or 0.0), 1),
+                "avg_resource": round(float(r.avg_resource or 0.0), 1),
+                "avg_nsi": round(float(r.avg_nsi or 0.0), 1),
+                "avg_signal": round(float(r.avg_signal or 0.0), 1),
+                "at_risk_count": int(r.at_risk_count or 0),
+                "anomaly_count": int(r.anomaly_count or 0),
+                "reading_count": int(r.reading_count or 0),
+            }
+        )
+
+    min_date = db.scalar(select(func.min(func.date(Reading.timestamp))))
+    max_date = db.scalar(select(func.max(func.date(Reading.timestamp))))
+
+    return {
+        "timeline": timeline,
+        "available_range": {
+            "min_date": min_date,
+            "max_date": max_date,
+        },
+        "coverage_note": "Chronological telemetry history across SQLite database readings.",
     }

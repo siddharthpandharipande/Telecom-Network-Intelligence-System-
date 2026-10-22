@@ -5,17 +5,13 @@ import {
   Activity,
   MapPin,
   Brain,
-  ShieldAlert,
   Server,
   Settings,
   Radio,
   Database,
   ChevronRight,
-  FileText,
-  BarChart3,
   Radar
 } from 'lucide-react';
-import { useTelemetry } from '../../context/TelemetryContext';
 
 interface NavItem {
   label: string;
@@ -31,9 +27,6 @@ interface NavSection {
 }
 
 export const Sidebar: React.FC<{ collapsed: boolean; toggleCollapse: () => void }> = ({ collapsed }) => {
-  const { incidents } = useTelemetry();
-  const criticalCount = incidents.filter(i => i.status !== 'RESOLVED').length;
-
   const sections: NavSection[] = [
     {
       title: 'PLATFORM',
@@ -43,14 +36,6 @@ export const Sidebar: React.FC<{ collapsed: boolean; toggleCollapse: () => void 
         { label: 'Network Map', path: '/map', icon: <MapPin size={18} /> },
         { label: 'AI Diagnostics', path: '/svm', icon: <Brain size={18} /> },
         { label: 'DBSCAN Anomalies', path: '/dbscan', icon: <Radar size={18} /> },
-        { label: 'Analytics', path: '/analytics', icon: <BarChart3 size={18} /> },
-        {
-          label: 'Alerts & Incidents',
-          path: '/incidents',
-          icon: <ShieldAlert size={18} />,
-          badge: criticalCount > 0 ? criticalCount : undefined,
-          badgeColor: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30'
-        },
       ]
     },
     {
@@ -58,7 +43,6 @@ export const Sidebar: React.FC<{ collapsed: boolean; toggleCollapse: () => void 
       items: [
         { label: 'Network Health', path: '/health', icon: <Activity size={18} /> },
         { label: 'Network Assets', path: '/assets', icon: <Server size={18} /> },
-        { label: 'Model Card', path: '/model', icon: <FileText size={18} /> },
         { label: 'Settings', path: '/settings', icon: <Settings size={18} /> },
       ]
     }

@@ -21,9 +21,10 @@ router = APIRouter(tags=["Assets"])
 @router.get("/assets", response_model=PaginatedAssetsResponse)
 def list_assets(
     country: Optional[str] = Query(None, description="Filter by country"),
+    continent: Optional[str] = Query(None, description="Filter by continent"),
     city: Optional[str] = Query(None, description="Filter by city"),
     asset_type: Optional[str] = Query(None, description="Filter by asset type"),
-    status: Optional[str] = Query(None, description="Filter by status (green, yellow, purple, red)"),
+    status: Optional[str] = Query(None, description="Filter by status (green, yellow, purple, red, healthy, warning, anomaly, critical)"),
     is_at_risk: Optional[bool] = Query(None, description="Filter by at-risk boolean flag"),
     is_anomaly: Optional[bool] = Query(None, description="Filter by anomaly boolean flag"),
     source: Optional[str] = Query(None, description="Filter by reading source (seed, csv, manual)"),
@@ -41,14 +42,54 @@ def list_assets(
     )
 
     # Apply filters
-    if country:
-        base_query = base_query.where(Asset.country.ilike(f"%{country}%"))
-    if city:
-        base_query = base_query.where(Asset.city.ilike(f"%{city}%"))
-    if asset_type:
+    if continent and continent != "All":
+        clean_continent = continent.strip()
+        base_query = base_query.where(
+            (func.lower(Asset.continent) == clean_continent.lower())
+            | (Asset.continent.ilike(f"%{clean_continent}%"))
+        )
+    if country and country != "All":
+        clean_country = country.strip()
+        if clean_country.lower() == "england":
+            from backend.app.geo import CONTINENT_HIERARCHY
+            england_cities = [c.lower() for c in CONTINENT_HIERARCHY["Europe"]["England"]]
+            base_query = base_query.where(
+                (func.lower(Asset.country) == "england")
+                | (
+                    func.lower(Asset.country).in_(["uk", "united kingdom"])
+                    & func.lower(Asset.city).in_(england_cities)
+                )
+            )
+        elif clean_country.lower() in ("uk", "united kingdom"):
+            base_query = base_query.where(
+                (func.lower(Asset.country).in_(["uk", "united kingdom", "england"]))
+                | (Asset.country.ilike(f"%{clean_country}%"))
+            )
+        else:
+            base_query = base_query.where(
+                (func.lower(Asset.country) == clean_country.lower())
+                | (Asset.country.ilike(f"%{clean_country}%"))
+            )
+    if city and city != "All":
+        clean_city = city.strip()
+        base_query = base_query.where(
+            (func.lower(Asset.city) == clean_city.lower())
+            | (Asset.city.ilike(f"%{clean_city}%"))
+        )
+    if asset_type and asset_type != "All":
         base_query = base_query.where(Asset.asset_type.ilike(f"%{asset_type}%"))
-    if status:
-        base_query = base_query.where(Reading.status == status.lower())
+    if status and status != "All":
+        status_val = status.lower()
+        if status_val in ["healthy", "normal", "green"]:
+            base_query = base_query.where(Reading.status == "green")
+        elif status_val in ["warning", "yellow"]:
+            base_query = base_query.where(Reading.status == "yellow")
+        elif status_val in ["purple", "anomaly"]:
+            base_query = base_query.where(Reading.status == "purple")
+        elif status_val in ["critical", "red", "at risk", "at-risk"]:
+            base_query = base_query.where(Reading.status == "red")
+        else:
+            base_query = base_query.where(Reading.status == status_val)
     if is_at_risk is not None:
         base_query = base_query.where(Reading.is_at_risk == is_at_risk)
     if is_anomaly is not None:
@@ -56,7 +97,12 @@ def list_assets(
     if source:
         base_query = base_query.where(Reading.source == source)
     if q:
-        base_query = base_query.where(Asset.asset_id.ilike(f"%{q}%"))
+        query_pattern = f"%{q.strip()}%"
+        base_query = base_query.where(
+            (Asset.asset_id.ilike(query_pattern))
+            | (Asset.city.ilike(query_pattern))
+            | (Asset.country.ilike(query_pattern))
+        )
 
     # Count total matching
     count_subquery = base_query.subquery()
@@ -100,6 +146,7 @@ def list_assets(
 @router.get("/map/points", response_model=List[MapPoint])
 def get_map_points(
     country: Optional[str] = Query(None),
+    continent: Optional[str] = Query(None),
     city: Optional[str] = Query(None),
     asset_type: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -123,19 +170,45 @@ def get_map_points(
             Reading.is_anomaly,
             Asset.asset_type,
             Asset.city,
+            Asset.country,
+            Asset.continent,
         )
         .join(Reading, Asset.latest_reading_id == Reading.id)
         .where(Asset.latitude.is_not(None), Asset.longitude.is_not(None))
     )
 
-    if country:
-        query = query.where(Asset.country.ilike(f"%{country}%"))
-    if city:
-        query = query.where(Asset.city.ilike(f"%{city}%"))
-    if asset_type:
+    if continent and continent != "All":
+        clean_continent = continent.strip()
+        query = query.where(
+            (func.lower(Asset.continent) == clean_continent.lower())
+            | (Asset.continent.ilike(f"%{clean_continent}%"))
+        )
+    if country and country != "All":
+        clean_country = country.strip()
+        query = query.where(
+            (func.lower(Asset.country) == clean_country.lower())
+            | (Asset.country.ilike(f"%{clean_country}%"))
+        )
+    if city and city != "All":
+        clean_city = city.strip()
+        query = query.where(
+            (func.lower(Asset.city) == clean_city.lower())
+            | (Asset.city.ilike(f"%{clean_city}%"))
+        )
+    if asset_type and asset_type != "All":
         query = query.where(Asset.asset_type.ilike(f"%{asset_type}%"))
-    if status:
-        query = query.where(Reading.status == status.lower())
+    if status and status != "All":
+        status_val = status.lower()
+        if status_val in ["healthy", "normal", "green"]:
+            query = query.where(Reading.status == "green")
+        elif status_val in ["warning", "yellow"]:
+            query = query.where(Reading.status == "yellow")
+        elif status_val in ["purple", "anomaly"]:
+            query = query.where(Reading.status == "purple")
+        elif status_val in ["critical", "red", "at risk", "at-risk"]:
+            query = query.where(Reading.status == "red")
+        else:
+            query = query.where(Reading.status == status_val)
     if is_at_risk is not None:
         query = query.where(Reading.is_at_risk == is_at_risk)
     if is_anomaly is not None:
@@ -143,7 +216,12 @@ def get_map_points(
     if source:
         query = query.where(Reading.source == source)
     if q:
-        query = query.where(Asset.asset_id.ilike(f"%{q}%"))
+        query_pattern = f"%{q.strip()}%"
+        query = query.where(
+            (Asset.asset_id.ilike(query_pattern))
+            | (Asset.city.ilike(query_pattern))
+            | (Asset.country.ilike(query_pattern))
+        )
 
     results = db.execute(query.limit(20000)).all()
 
@@ -159,6 +237,8 @@ def get_map_points(
                 "is_anomaly": bool(row.is_anomaly),
                 "asset_type": row.asset_type,
                 "city": row.city,
+                "country": row.country,
+                "continent": row.continent,
             }
         )
     return points
@@ -205,3 +285,28 @@ def get_asset_detail(
         "latest": latest_schema,
         "history": history_schemas,
     }
+
+
+@router.get("/geo/lookup")
+def lookup_coordinates(
+    lat: Optional[float] = Query(None, description="Latitude coordinate"),
+    lng: Optional[float] = Query(None, description="Longitude coordinate"),
+    latitude: Optional[float] = Query(None, description="Latitude alias"),
+    longitude: Optional[float] = Query(None, description="Longitude alias"),
+) -> Dict[str, Any]:
+    """Reverse geocode latitude and longitude into continent, country, city, and region."""
+    from backend.app.geo import resolve_location_from_coords
+    target_lat = lat if lat is not None else latitude
+    target_lng = lng if lng is not None else longitude
+    return resolve_location_from_coords(target_lat, target_lng)
+
+
+@router.get("/geo/search")
+def search_locations(
+    q: str = Query(..., description="City or country name to search"),
+) -> List[Dict[str, Any]]:
+    """Search for any city or country on Earth using local centroids and Nominatim geocoding."""
+    from backend.app.geo import search_global_location
+    return search_global_location(q)
+
+

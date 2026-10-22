@@ -106,6 +106,9 @@ class MapPoint(BaseModel):
     is_anomaly: bool
     asset_type: str
     city: Optional[str] = None
+    country: Optional[str] = None
+    continent: Optional[str] = None
+
 
 
 class IncidentEventResponse(BaseModel):
@@ -155,3 +158,84 @@ class ReplayResponse(BaseModel):
     items: List[ReadingResponse]
     next_cursor: int
     has_more: bool
+
+
+class ReplayMetaResponse(BaseModel):
+    start_time: str
+    end_time: str
+    distinct_hours: List[int]
+    total_readings: int
+    is_snapshot: bool
+    snapshot_date: str
+
+
+class ReplayHourResponse(BaseModel):
+    hour: int
+    timestamp_sample: str
+    count: int
+    readings: List[MapPoint]
+
+
+# Authentication & RBAC Schemas
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user_id: int
+    username: str
+    full_name: str
+    role: str
+    expires_at: datetime
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    full_name: str
+    role: str
+    is_active: bool
+    created_at: datetime
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    password: str
+    full_name: str
+    role: str = "noc_analyst"
+
+
+# Network Topology Links Schemas
+class NetworkLinkResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    link_id: str
+    source_asset_id: str
+    destination_asset_id: str
+    source_lat: Optional[float] = None
+    source_lng: Optional[float] = None
+    dest_lat: Optional[float] = None
+    dest_lng: Optional[float] = None
+    source_city: Optional[str] = None
+    dest_city: Optional[str] = None
+    link_type: str  # fiber, microwave, satellite
+    capacity_gbps: float
+    utilization_pct: float
+    status: str  # up, degraded, down
+    is_synthetic: bool
+    created_at: datetime
+
+
+class CreateLinkRequest(BaseModel):
+    link_id: str
+    source_asset_id: str
+    destination_asset_id: str
+    link_type: str = "fiber"
+    capacity_gbps: float = 10.0
+    utilization_pct: float = 50.0
+    status: str = "up"

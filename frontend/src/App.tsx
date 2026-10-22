@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { TelemetryProvider } from './context/TelemetryContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { AuthProvider } from './context/AuthContext';
 import { Sidebar } from './components/layout/Sidebar';
 import { Topbar } from './components/layout/Topbar';
 
 import { useApiStatus } from './api/hooks';
 import { OfflineBanner } from './components/common/OfflineBanner';
+import { AuthModal } from './components/common/AuthModal';
 
 // Pages
 import { Overview } from './pages/Overview';
@@ -27,11 +29,15 @@ export const App: React.FC = () => {
 
   return (
     <ThemeProvider>
-      <TelemetryProvider>
-        <Router>
-          <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col antialiased transition-colors duration-200">
-            {/* Global API Offline Banner */}
-            <OfflineBanner isOnline={isOnline} onRetry={checkHealth} isChecking={isChecking} />
+      <AuthProvider>
+        <TelemetryProvider>
+          <Router>
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col antialiased transition-colors duration-200">
+              {/* Role-Based Authentication Modal */}
+              <AuthModal />
+
+              {/* Global API Offline Banner */}
+              <OfflineBanner isOnline={isOnline} onRetry={checkHealth} isChecking={isChecking} />
 
             {/* Topbar Header */}
             <Topbar
@@ -70,7 +76,8 @@ export const App: React.FC = () => {
             </main>
           </div>
         </Router>
-      </TelemetryProvider>
+        </TelemetryProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 };

@@ -18,7 +18,7 @@ import {
   ShieldCheck,
   ShieldAlert,
 } from 'lucide-react';
-import { predictRecord, ingestCsv, getAssets } from '../../api/client';
+import { predictRecord, ingestCsv, getAssets, getGeoLookup } from '../../api/client';
 import { useTelemetry } from '../../context/TelemetryContext';
 import { Reading, IngestionReport, PaginatedAssets } from '../../types/api';
 import { getStatusStyle, useApiStatus } from '../../api/hooks';
@@ -36,6 +36,7 @@ export const CompanyDataInputPanel: React.FC = () => {
   const [formData, setFormData] = useState({
     asset_id: 'MH-PN-999',
     asset_type: 'Cell Tower',
+    continent: 'Asia',
     city: 'Pune',
     country: 'India',
     region: 'Maharashtra',
@@ -51,6 +52,52 @@ export const CompanyDataInputPanel: React.FC = () => {
     resource_utilization_pct: 96,
     timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
   });
+
+  const [geoInfo, setGeoInfo] = useState<{
+    continent: string | null;
+    country: string | null;
+    city: string | null;
+    region: string | null;
+    distance_km?: number | null;
+  } | null>({
+    continent: 'Asia',
+    country: 'India',
+    city: 'Pune',
+    region: 'Maharashtra',
+    distance_km: 0.4,
+  });
+  const [showLocationOverride, setShowLocationOverride] = useState<boolean>(false);
+  const [isResolvingGeo, setIsResolvingGeo] = useState<boolean>(false);
+
+  // Automatically reverse geocode GPS coordinates to continent, country, city
+  useEffect(() => {
+    const lat = Number(formData.latitude);
+    const lng = Number(formData.longitude);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      setIsResolvingGeo(true);
+      const timer = setTimeout(async () => {
+        try {
+          const res = await getGeoLookup(lat, lng);
+          if (res && res.city) {
+            setGeoInfo(res);
+            setFormData((prev) => ({
+              ...prev,
+              continent: res.continent || prev.continent,
+              country: res.country || prev.country,
+              city: res.city || prev.city,
+              region: res.region || prev.region,
+            }));
+          }
+        } catch {
+          // Fallback silently if network hiccup
+        } finally {
+          setIsResolvingGeo(false);
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [formData.latitude, formData.longitude]);
 
   const [manualImpute, setManualImpute] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -126,9 +173,10 @@ export const CompanyDataInputPanel: React.FC = () => {
       const payload = {
         asset_id: formData.asset_id.trim(),
         asset_type: formData.asset_type,
-        city: formData.city.trim() || undefined,
-        country: formData.country.trim() || undefined,
-        region: formData.region.trim() || undefined,
+        continent: (showLocationOverride ? formData.continent : (geoInfo?.continent || formData.continent))?.trim() || undefined,
+        city: (showLocationOverride ? formData.city : (geoInfo?.city || formData.city))?.trim() || undefined,
+        country: (showLocationOverride ? formData.country : (geoInfo?.country || formData.country))?.trim() || undefined,
+        region: (showLocationOverride ? formData.region : (geoInfo?.region || formData.region))?.trim() || undefined,
         latitude: Number(formData.latitude),
         longitude: Number(formData.longitude),
         signal_strength_dbm: Number(formData.signal_strength_dbm),
@@ -269,6 +317,7 @@ export const CompanyDataInputPanel: React.FC = () => {
                   applyPreset({
                     asset_id: 'MH-PN-SHIV-901',
                     asset_type: 'Cell Tower',
+                    continent: 'Asia',
                     city: 'Pune',
                     country: 'India',
                     region: 'Maharashtra',
@@ -297,6 +346,7 @@ export const CompanyDataInputPanel: React.FC = () => {
                   applyPreset({
                     asset_id: 'MH-MB-MAR-802',
                     asset_type: 'Base Station',
+                    continent: 'Asia',
                     city: 'Mumbai',
                     country: 'India',
                     region: 'Maharashtra',
@@ -325,6 +375,7 @@ export const CompanyDataInputPanel: React.FC = () => {
                   applyPreset({
                     asset_id: 'DL-DEL-CP-703',
                     asset_type: 'Router',
+                    continent: 'Asia',
                     city: 'Delhi',
                     country: 'India',
                     region: 'Delhi',
@@ -353,6 +404,7 @@ export const CompanyDataInputPanel: React.FC = () => {
                   applyPreset({
                     asset_id: 'KA-BL-101',
                     asset_type: 'Network Gateway',
+                    continent: 'Asia',
                     city: 'Bangalore',
                     country: 'India',
                     region: 'Karnataka',
@@ -387,10 +439,18 @@ export const CompanyDataInputPanel: React.FC = () => {
           >
             {/* Section 1: Identification & Location */}
             <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                1. Node Identification & Geographical Location
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                  <MapPin size={14} className="text-blue-500" />
+                  <span>1. Asset Identity & GPS Coordinates (Auto-Geolocated)</span>
+                </h3>
+                <span className="text-[11px] text-slate-400">
+                  Telecom GPS coordinates locate the asset on the global map
+                </span>
+              </div>
+
+              {/* Primary GPS & Asset Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
                 <div>
                   <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Asset ID *</label>
                   <input
@@ -418,46 +478,28 @@ export const CompanyDataInputPanel: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">City</label>
-                  <input
-                    type="text"
-                    value={formData.city}
-                    onChange={(e) => handleInputChange('city', e.target.value)}
-                    placeholder="e.g. Pune"
-                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Country</label>
-                  <input
-                    type="text"
-                    value={formData.country}
-                    onChange={(e) => handleInputChange('country', e.target.value)}
-                    placeholder="e.g. India"
-                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Latitude</label>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Latitude (GPS) *</label>
                   <input
                     type="number"
                     step="0.0001"
+                    required
                     value={formData.latitude}
                     onChange={(e) => handleInputChange('latitude', parseFloat(e.target.value) || 0)}
-                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                    placeholder="e.g. 18.5204"
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-blue-400/50 dark:border-blue-500/50 focus:border-blue-500 text-slate-900 dark:text-slate-100 font-mono font-bold focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Longitude</label>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Longitude (GPS) *</label>
                   <input
                     type="number"
                     step="0.0001"
+                    required
                     value={formData.longitude}
                     onChange={(e) => handleInputChange('longitude', parseFloat(e.target.value) || 0)}
-                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-slate-300 dark:border-[#334155] focus:border-blue-500 text-slate-900 dark:text-slate-100 focus:outline-none"
+                    placeholder="e.g. 73.8567"
+                    className="w-full p-2.5 rounded-lg bg-slate-50 dark:bg-[#0f172a] border border-blue-400/50 dark:border-blue-500/50 focus:border-blue-500 text-slate-900 dark:text-slate-100 font-mono font-bold focus:outline-none"
                   />
                 </div>
 
@@ -472,6 +514,95 @@ export const CompanyDataInputPanel: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* Auto-Resolved Location Banner */}
+              <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                    <MapPin size={18} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        GPS Auto-Located Location:
+                      </span>
+                      {isResolvingGeo && <RefreshCw size={12} className="animate-spin text-blue-500" />}
+                    </div>
+                    <div className="font-mono text-blue-600 dark:text-blue-400 font-bold mt-0.5">
+                      {(showLocationOverride ? formData.city : (geoInfo?.city || formData.city)) || 'Detecting City...'}, {(showLocationOverride ? formData.country : (geoInfo?.country || formData.country)) || 'Detecting Country...'} ({(showLocationOverride ? formData.continent : (geoInfo?.continent || formData.continent)) || 'Detecting Continent...'})
+                      {geoInfo?.distance_km != null && (
+                        <span className="text-[11px] font-normal text-slate-500 ml-2 font-sans">
+                          &bull; ~{geoInfo.distance_km} km to regional centroid
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                    Map Position Ready
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowLocationOverride(!showLocationOverride)}
+                    className="text-[11px] text-slate-600 dark:text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 underline font-medium"
+                  >
+                    {showLocationOverride ? 'Hide Details' : 'View / Override Names'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Collapsible / Optional Name Overrides */}
+              {showLocationOverride && (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <label className="text-slate-500 dark:text-slate-400 font-medium block mb-1">City Hub</label>
+                    <input
+                      type="text"
+                      value={formData.city}
+                      onChange={(e) => handleInputChange('city', e.target.value)}
+                      placeholder="e.g. Pune"
+                      className="w-full p-2 rounded-lg bg-white dark:bg-[#0f172a] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-xs focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-500 dark:text-slate-400 font-medium block mb-1">Country</label>
+                    <input
+                      type="text"
+                      value={formData.country}
+                      onChange={(e) => handleInputChange('country', e.target.value)}
+                      placeholder="e.g. India"
+                      className="w-full p-2 rounded-lg bg-white dark:bg-[#0f172a] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-xs focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-500 dark:text-slate-400 font-medium block mb-1">Continent</label>
+                    <select
+                      value={formData.continent}
+                      onChange={(e) => handleInputChange('continent', e.target.value)}
+                      className="w-full p-2 rounded-lg bg-white dark:bg-[#0f172a] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-xs focus:outline-none"
+                    >
+                      <option value="Asia">Asia</option>
+                      <option value="Europe">Europe</option>
+                      <option value="North America">North America</option>
+                      <option value="South America">South America</option>
+                      <option value="Africa">Africa</option>
+                      <option value="Oceania">Oceania</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-slate-500 dark:text-slate-400 font-medium block mb-1">Region / State</label>
+                    <input
+                      type="text"
+                      value={formData.region}
+                      onChange={(e) => handleInputChange('region', e.target.value)}
+                      placeholder="e.g. Maharashtra"
+                      className="w-full p-2 rounded-lg bg-white dark:bg-[#0f172a] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-xs focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Section 2: Health & Performance Metrics */}

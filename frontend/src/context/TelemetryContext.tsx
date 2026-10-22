@@ -114,6 +114,9 @@ interface TelemetryContextType {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   refreshData: () => Promise<void>;
+  addAlert: (alert: Alert) => void;
+  dismissAlert: (alertId: string) => void;
+  clearAllAlerts: () => void;
   acknowledgeIncident: (id: string) => Promise<void>;
   assignIncident: (id: string, operator: string) => Promise<void>;
   investigateIncident: (id: string) => Promise<void>;
@@ -147,14 +150,32 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lastTelemetryTime, setLastTelemetryTime] = useState<string>('Static snapshot');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  const addAlert = useCallback((newAlert: Alert) => {
+    setAlerts((prev) => {
+      if (prev.some((a) => a.id === newAlert.id || (a.assetId === newAlert.assetId && a.status === 'Open'))) {
+        return prev;
+      }
+      return [newAlert, ...prev];
+    });
+  }, []);
+
+  const dismissAlert = useCallback((alertId: string) => {
+    setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+  }, []);
+
+  const clearAllAlerts = useCallback(() => {
+    setAlerts([]);
+  }, []);
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [assetsData, incidentsData, statsData] = await Promise.all([
+      const [assetsData, incidentsData, statsData, atRiskData] = await Promise.all([
         getAssets({ page: 1, page_size: 100 }),
         getIncidents({ page: 1, page_size: 50 }),
         getStatsOverview().catch(() => null),
+        getAssets({ is_at_risk: true, page: 1, page_size: 25 }).catch(() => null),
       ]);
 
       const mappedCells = assetsData.items.map(readingToNetworkCell);
@@ -197,9 +218,29 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           title: i.title,
           assetId: i.asset_id,
           timestamp: new Date(i.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          detectionSource: i.source === 'auto' ? 'SVM' : 'Health Monitor',
+          detectionSource: i.source === 'auto' ? 'SVM Classifier' : 'Health Monitor',
           status: i.status === 'open' ? 'Open' : i.status === 'investigating' ? 'Investigating' : 'Resolved',
         }));
+
+      // Also include active at-risk assets flagged by SVM that don't have explicit incident tickets yet
+      const seenAssetIds = new Set(derivedAlerts.map((a) => a.assetId));
+      if (atRiskData?.items) {
+        for (const r of atRiskData.items) {
+          if (!seenAssetIds.has(r.asset_id)) {
+            seenAssetIds.add(r.asset_id);
+            derivedAlerts.push({
+              id: `RISK-${r.asset_id}`,
+              severity: 'critical',
+              title: `Critical Risk: Node ${r.asset_id} (${r.city || r.country || 'NOC'}) Flagged At-Risk`,
+              assetId: r.asset_id,
+              timestamp: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              detectionSource: 'SVM Predictive Pipeline',
+              status: 'Open',
+            });
+          }
+        }
+      }
+
       setAlerts(derivedAlerts);
 
       if (statsData) {
@@ -359,6 +400,22 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setSelectedCell(savedCell);
       setSubmittedCell(savedCell);
 
+      // Check if newly ingested asset is at-risk or anomaly, and trigger immediate top-right notification
+      if (res.reading.is_at_risk || res.reading.status === 'red' || res.reading.is_anomaly) {
+        const newAlert: Alert = {
+          id: `RISK-${Date.now()}-${res.reading.asset_id}`,
+          severity: res.reading.status === 'red' || res.reading.is_at_risk ? 'critical' : 'high',
+          title: res.reading.is_at_risk
+            ? `🚨 CRITICAL RISK: Asset ${res.reading.asset_id} (${res.reading.city || 'Network Node'}) Flagged At-Risk`
+            : `⚠️ ANOMALY ALERT: Node ${res.reading.asset_id} Density Outlier`,
+          assetId: res.reading.asset_id,
+          timestamp: 'Just now',
+          detectionSource: res.reading.is_at_risk ? 'SVM Classifier' : 'DBSCAN Anomaly Monitor',
+          status: 'Open',
+        };
+        addAlert(newAlert);
+      }
+
       // Refresh overview stats and incidents in background
       getStatsOverview().then(setStats).catch(() => {});
       getIncidents({ page: 1, page_size: 50 }).then((inc) => {
@@ -392,6 +449,9 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         searchQuery,
         setSearchQuery,
         refreshData: loadData,
+        addAlert,
+        dismissAlert,
+        clearAllAlerts,
         acknowledgeIncident,
         assignIncident,
         investigateIncident,

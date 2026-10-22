@@ -54,6 +54,18 @@ class Asset(Base):
         back_populates="asset",
         cascade="all, delete-orphan",
     )
+    outgoing_links: Mapped[List["NetworkLink"]] = relationship(
+        "NetworkLink",
+        foreign_keys="NetworkLink.source_asset_id",
+        back_populates="source_asset",
+        cascade="all, delete-orphan",
+    )
+    incoming_links: Mapped[List["NetworkLink"]] = relationship(
+        "NetworkLink",
+        foreign_keys="NetworkLink.destination_asset_id",
+        back_populates="destination_asset",
+        cascade="all, delete-orphan",
+    )
 
 
 class Reading(Base):
@@ -172,3 +184,60 @@ class IngestionLog(Base):
     report_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     readings: Mapped[List["Reading"]] = relationship("Reading", back_populates="ingestion")
+
+
+class NetworkLink(Base):
+    __tablename__ = "network_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    link_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    source_asset_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("assets.asset_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    destination_asset_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("assets.asset_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    link_type: Mapped[str] = mapped_column(String(32), nullable=False, default="fiber")  # fiber, microwave, satellite
+    capacity_gbps: Mapped[float] = mapped_column(Float, nullable=False, default=10.0)
+    utilization_pct: Mapped[float] = mapped_column(Float, nullable=False, default=50.0)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="up")  # up, degraded, down
+    is_synthetic: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
+
+    source_asset: Mapped["Asset"] = relationship(
+        "Asset", foreign_keys=[source_asset_id], back_populates="outgoing_links"
+    )
+    destination_asset: Mapped["Asset"] = relationship(
+        "Asset", foreign_keys=[destination_asset_id], back_populates="incoming_links"
+    )
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="noc_analyst")  # noc_analyst, network_engineer, admin
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+    sessions: Mapped[List["UserSession"]] = relationship(
+        "UserSession", back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+    user: Mapped["User"] = relationship("User", back_populates="sessions")
