@@ -93,7 +93,7 @@ export interface Alert {
   title: string;
   assetId: string;
   timestamp: string;
-  detectionSource: 'SVM' | 'DBSCAN' | 'Health Monitor' | string;
+  detectionSource: 'Random Forest' | 'Health Monitor' | string;
   status: 'Open' | 'Investigating' | 'Resolved';
 }
 

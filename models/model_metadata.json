@@ -1,0 +1,81 @@
+{
+  "model_type": "RandomForestClassifier",
+  "hyperparameters": {
+    "n_estimators": 100,
+    "random_state": 42,
+    "class_weight": "balanced"
+  },
+  "train_samples": 4800,
+  "test_samples": 1200,
+  "total_samples": 6000,
+  "metrics_test": {
+    "accuracy": 0.995,
+    "macro_precision": 0.9966832504145936,
+    "macro_recall": 0.9902400660117068,
+    "macro_f1": 0.9933918472020961,
+    "per_class": {
+      "Routine": {
+        "precision": 1.0,
+        "recall": 0.9976019184652278,
+        "f1_score": 0.9987995198079231,
+        "support": 417
+      },
+      "Medium": {
+        "precision": 0.9900497512437811,
+        "recall": 1.0,
+        "f1_score": 0.995,
+        "support": 597
+      },
+      "High": {
+        "precision": 1.0,
+        "recall": 0.9731182795698925,
+        "f1_score": 0.9863760217983651,
+        "support": 186
+      }
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "Routine",
+      "Medium",
+      "High"
+    ],
+    "matrix": [
+      [
+        416,
+        1,
+        0
+      ],
+      [
+        0,
+        597,
+        0
+      ],
+      [
+        0,
+        5,
+        181
+      ]
+    ]
+  },
+  "feature_importances": {
+    "Packet_Loss_pct": 0.3020324294665969,
+    "Latency_ms": 0.1420698430045964,
+    "Call_Drop_Rate_pct": 0.1372121859528359,
+    "Resource_Utilization_pct": 0.08073558656231446,
+    "Traffic_Load_pct": 0.07841560008504254,
+    "Network_Stress_Index": 0.06199722335329031,
+    "Signal_Quality_Score": 0.02926993832457942,
+    "Signal_Strength_dBm": 0.02804652312141165,
+    "Asset_Type_Network Gateway": 0.025209673707881474,
+    "Asset_Type_Router": 0.02374880218635004,
+    "Asset_Type_Base Station": 0.02068891030765634,
+    "Asset_Type_Cell Tower": 0.019886713983108005,
+    "Connected_Users": 0.01355184984394101,
+    "Throughput_Mbps": 0.013463604857213806,
+    "Throughput_per_User": 0.012973879087497734,
+    "Hour": 0.009318633753292366,
+    "Peak_Hour": 0.0013786024023918204
+  },
+  "target_definition_note": "The model target (Investigation_Priority) is policy-derived from the Version 3 rule-based heuristic engine. It reflects multi-metric SLA warning and symptom thresholds rather than observed physical component failures."
+}

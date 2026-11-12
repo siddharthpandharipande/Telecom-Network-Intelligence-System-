@@ -34,8 +34,6 @@ export function readingToNetworkCell(r: Reading): NetworkCell {
       ? r.threshold_breaches[0].message
       : r.is_at_risk
       ? 'SLA Operational Stress'
-      : r.is_anomaly
-      ? 'Multivariate Density Outlier'
       : 'Optimal Baseline Telemetry';
 
   return {
@@ -218,11 +216,11 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           title: i.title,
           assetId: i.asset_id,
           timestamp: new Date(i.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          detectionSource: i.source === 'auto' ? 'SVM Classifier' : 'Health Monitor',
+          detectionSource: i.source === 'auto' ? 'Random Forest Classifier' : 'Health Monitor',
           status: i.status === 'open' ? 'Open' : i.status === 'investigating' ? 'Investigating' : 'Resolved',
         }));
 
-      // Also include active at-risk assets flagged by SVM that don't have explicit incident tickets yet
+      // Also include active at-risk assets flagged by Random Forest that don't have explicit incident tickets yet
       const seenAssetIds = new Set(derivedAlerts.map((a) => a.assetId));
       if (atRiskData?.items) {
         for (const r of atRiskData.items) {
@@ -234,7 +232,7 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               title: `Critical Risk: Node ${r.asset_id} (${r.city || r.country || 'NOC'}) Flagged At-Risk`,
               assetId: r.asset_id,
               timestamp: new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              detectionSource: 'SVM Predictive Pipeline',
+              detectionSource: 'Random Forest Predictive Pipeline',
               status: 'Open',
             });
           }
@@ -405,12 +403,10 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const newAlert: Alert = {
           id: `RISK-${Date.now()}-${res.reading.asset_id}`,
           severity: res.reading.status === 'red' || res.reading.is_at_risk ? 'critical' : 'high',
-          title: res.reading.is_at_risk
-            ? `🚨 CRITICAL RISK: Asset ${res.reading.asset_id} (${res.reading.city || 'Network Node'}) Flagged At-Risk`
-            : `⚠️ ANOMALY ALERT: Node ${res.reading.asset_id} Density Outlier`,
+          title: `🚨 CRITICAL RISK: Asset ${res.reading.asset_id} (${res.reading.city || 'Network Node'}) Flagged At-Risk`,
           assetId: res.reading.asset_id,
           timestamp: 'Just now',
-          detectionSource: res.reading.is_at_risk ? 'SVM Classifier' : 'DBSCAN Anomaly Monitor',
+          detectionSource: 'Random Forest Classifier',
           status: 'Open',
         };
         addAlert(newAlert);

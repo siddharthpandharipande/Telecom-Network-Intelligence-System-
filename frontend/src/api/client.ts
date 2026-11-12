@@ -2,6 +2,7 @@ import {
   ApiError,
   ApiErrorPayload,
   AssetDetail,
+  AssetHealthResponse,
   CityRisk,
   CorrelationData,
   DbscanExploreResponse,
@@ -14,6 +15,20 @@ import {
   Incident,
   IngestionLogItem,
   IngestionReport,
+  InsightsByRegion,
+  InsightsOverview,
+  InsightsTopAssets,
+  TelemetryAnalysisRequest,
+  TelemetryAnalysisResponse,
+  ChatbotAskRequest,
+  ChatbotAskResponse,
+  AssetLocationResponse,
+  TrendFilterParams,
+  TrendFilterOptions,
+  PriorityTrendsData,
+  AssetTypeTrendsData,
+  LocationTrendsData,
+  CommonIssuesTrendsData,
   LoginResponse,
   MapPoint,
   ModelCard,
@@ -64,11 +79,14 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
           errors: [response.statusText],
         };
       }
-      throw new ApiError(errorPayload, response.statusText);
+      throw new ApiError(errorPayload, response.statusText, response.status);
     }
 
     return response.json() as Promise<T>;
   } catch (err: any) {
+    if (err instanceof ApiError) {
+      throw err;
+    }
     // If relative proxy fetch failed and no base URL was set, fallback directly to 127.0.0.1:8000
     if (!API_BASE_URL && !url.startsWith('http')) {
       const fallbackUrl = `http://127.0.0.1:8000${endpoint}`;
@@ -197,6 +215,179 @@ export async function getMapPoints(params: {
 
 export async function getAssetDetail(assetId: string): Promise<AssetDetail> {
   return apiFetch<AssetDetail>(`/api/assets/${encodeURIComponent(assetId)}`);
+}
+
+/**
+ * Fetch asset health, Version 3 heuristic explanation, and ML model decision-support flags.
+ * Calls GET /assets/{asset_id}/health (Requirement 3).
+ */
+export async function getAssetHealth(assetId: string): Promise<AssetHealthResponse> {
+  const cleanId = encodeURIComponent(assetId.trim());
+  return apiFetch<AssetHealthResponse>(`/assets/${cleanId}/health`);
+}
+
+/**
+ * NOC Command Center Insights: Question 1
+ * GET /api/insights/overview
+ */
+export async function getInsightsOverview(): Promise<InsightsOverview> {
+  return apiFetch<InsightsOverview>('/api/insights/overview');
+}
+
+/**
+ * NOC Command Center Insights: Question 2
+ * GET /api/insights/by-region
+ */
+export async function getInsightsByRegion(): Promise<InsightsByRegion> {
+  return apiFetch<InsightsByRegion>('/api/insights/by-region');
+}
+
+/**
+ * NOC Command Center Insights: Question 3
+ * GET /api/insights/top-assets
+ */
+export async function getInsightsTopAssets(): Promise<InsightsTopAssets> {
+  return apiFetch<InsightsTopAssets>('/api/insights/top-assets');
+}
+
+/**
+ * Analyze manual telemetry input in the Analyze Telemetry sandbox
+ * POST /api/telemetry/analyze
+ */
+export async function analyzeTelemetry(
+  payload: TelemetryAnalysisRequest
+): Promise<TelemetryAnalysisResponse> {
+  return apiFetch<TelemetryAnalysisResponse>('/api/telemetry/analyze', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Get latest manual telemetry analysis result for Command Center sync
+ * GET /api/telemetry/latest-analysis
+ */
+export async function getLatestAnalysis(): Promise<TelemetryAnalysisResponse | null> {
+  return apiFetch<TelemetryAnalysisResponse | null>('/api/telemetry/latest-analysis');
+}
+
+/**
+ * Reset latest manual telemetry analysis result (for testing)
+ * POST /api/telemetry/reset-analysis
+ */
+export async function resetLatestAnalysis(): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>('/api/telemetry/reset-analysis', {
+    method: 'POST',
+  });
+}
+
+/**
+ * Download professional academic PDF report for the latest manual telemetry analysis
+ * POST /api/report/generate
+ */
+export async function downloadPdfReport(
+  payload?: TelemetryAnalysisRequest
+): Promise<{ success: boolean; filename: string }> {
+  const url = `${API_BASE_URL}/api/report/generate`;
+  const options: RequestInit = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: payload ? JSON.stringify(payload) : undefined,
+  };
+
+  let response: Response;
+  try {
+    response = await fetch(url, options);
+  } catch (err) {
+    if (!API_BASE_URL && !url.startsWith('http')) {
+      response = await fetch(`http://127.0.0.1:8000/api/report/generate`, options);
+    } else {
+      throw err;
+    }
+  }
+
+  if (!response.ok) {
+    let errorMsg = `Report generation failed: HTTP ${response.status}`;
+    try {
+      const errJson = await response.json();
+      if (errJson.detail) errorMsg = errJson.detail;
+      else if (errJson.error) errorMsg = errJson.error;
+    } catch {
+      // ignore
+    }
+    throw new Error(errorMsg);
+  }
+
+  // Extract filename from Content-Disposition header if available
+  let filename = 'NEXUSNET_Network_Health_Report.pdf';
+  const disposition = response.headers.get('Content-Disposition');
+  if (disposition && disposition.includes('filename=')) {
+    const match = disposition.match(/filename=["']?([^"';]+)["']?/);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(downloadUrl);
+
+  return { success: true, filename };
+}
+
+/**
+ * Get stored geographic location details for an asset ID
+ * GET /api/assets/{asset_id}/location
+ */
+export async function getAssetLocation(assetId: string): Promise<AssetLocationResponse> {
+  return apiFetch<AssetLocationResponse>(`/api/assets/${encodeURIComponent(assetId)}/location`);
+}
+
+// ----------------------------------------------------------------------------
+// Network Trends Analytics API
+// ----------------------------------------------------------------------------
+function buildTrendQuery(params?: TrendFilterParams): string {
+  if (!params) return '';
+  const q = new URLSearchParams();
+  if (params.asset_type && !params.asset_type.toLowerCase().startsWith('all')) {
+    q.set('asset_type', params.asset_type);
+  }
+  if (params.country_or_region && !params.country_or_region.toLowerCase().startsWith('all')) {
+    q.set('country_or_region', params.country_or_region);
+  }
+  if (params.priority && !params.priority.toLowerCase().startsWith('all')) {
+    q.set('priority', params.priority);
+  }
+  const str = q.toString();
+  return str ? `?${str}` : '';
+}
+
+export async function getTrendFilterOptions(): Promise<TrendFilterOptions> {
+  return apiFetch<TrendFilterOptions>('/api/insights/trends/filter-options');
+}
+
+export async function getTrendsPriority(params?: TrendFilterParams): Promise<PriorityTrendsData> {
+  return apiFetch<PriorityTrendsData>(`/api/insights/trends/priority${buildTrendQuery(params)}`);
+}
+
+export async function getTrendsByAssetType(params?: TrendFilterParams): Promise<AssetTypeTrendsData> {
+  return apiFetch<AssetTypeTrendsData>(`/api/insights/trends/by-asset-type${buildTrendQuery(params)}`);
+}
+
+export async function getTrendsByLocation(params?: TrendFilterParams): Promise<LocationTrendsData> {
+  return apiFetch<LocationTrendsData>(`/api/insights/trends/by-location${buildTrendQuery(params)}`);
+}
+
+export async function getTrendsCommonIssues(params?: TrendFilterParams): Promise<CommonIssuesTrendsData> {
+  return apiFetch<CommonIssuesTrendsData>(`/api/insights/trends/common-issues${buildTrendQuery(params)}`);
 }
 
 export async function getStatsOverview(): Promise<StatsOverview> {
@@ -449,5 +640,23 @@ export async function searchGeoLocation(query: string): Promise<Array<{
     label: string;
   }>>(`/api/geo/search?q=${encodeURIComponent(query)}`);
 }
+
+// ----------------------------------------------------------------------------
+// Gemini NOC Assistant Chatbot
+// ----------------------------------------------------------------------------
+export async function askNocChatbot(payload: ChatbotAskRequest): Promise<ChatbotAskResponse> {
+  return apiFetch<ChatbotAskResponse>('/api/chatbot/ask', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function clearNocChatbotSession(sessionId: string): Promise<{ status: string; sessionId: string }> {
+  return apiFetch<{ status: string; sessionId: string }>('/api/chatbot/clear', {
+    method: 'POST',
+    body: JSON.stringify({ sessionId }),
+  });
+}
+
 
 

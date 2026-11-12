@@ -1,1 +1,1 @@
-"""NEXUSNET FastAPI Application Package."""
+"""NEXUSNET Backend App Package"""

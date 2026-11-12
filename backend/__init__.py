@@ -1,1 +1,1 @@
-"""NEXUSNET Backend Package."""
+"""NEXUSNET Backend Package"""

@@ -1,0 +1,36 @@
+{
+  "model_name": "IsolationForest",
+  "contamination": 0.05,
+  "random_state": 42,
+  "n_estimators": 100,
+  "features": [
+    "Signal_Strength_dBm",
+    "Latency_ms",
+    "Packet_Loss_pct",
+    "Throughput_Mbps",
+    "Connected_Users",
+    "Traffic_Load_pct",
+    "Call_Drop_Rate_pct",
+    "Resource_Utilization_pct",
+    "Network_Stress_Index",
+    "Throughput_per_User",
+    "Signal_Quality_Score",
+    "Hour",
+    "Peak_Hour"
+  ],
+  "num_features": 13,
+  "score_interpretation": "Calculated as -score_samples(X). Range ~[0.40, 0.67]. Higher values represent more anomalous/unusual multi-dimensional telemetry.",
+  "excluded_features": [
+    "Asset_ID",
+    "Latitude",
+    "Longitude",
+    "City",
+    "Country",
+    "Region",
+    "Continent",
+    "Timestamp",
+    "Timestamp_dt",
+    "Network_Status",
+    "Investigation_Priority"
+  ]
+}

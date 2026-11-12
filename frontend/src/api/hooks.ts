@@ -19,7 +19,7 @@ export const STATUS_COLORS: Record<
     border: 'border-red-500/30',
     badge: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-300 dark:border-red-800',
     hex: '#ef4444',
-    label: 'At risk (SVM)',
+    label: 'At risk (Random Forest)',
   },
   purple: {
     bg: 'bg-purple-500/10 dark:bg-purple-500/20',
@@ -27,7 +27,7 @@ export const STATUS_COLORS: Record<
     border: 'border-purple-500/30',
     badge: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border-purple-300 dark:border-purple-800',
     hex: '#a855f7',
-    label: 'Anomaly only (DBSCAN)',
+    label: 'Elevated Operational Stress',
   },
   yellow: {
     bg: 'bg-amber-500/10 dark:bg-amber-500/20',

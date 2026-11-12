@@ -1,206 +1,111 @@
-# NEXUSNET — AI-Powered Telecom Network Intelligence System
+# NEXUSNET — Autonomous Telecom Network Intelligence & Decision Support Platform
 
-**NEXUSNET** is a production-grade, AI-powered Telecom Network Operations Center (NOC) intelligence platform. It monitors mission-critical telecom infrastructure across 6,000+ assets, predicts equipment degradation risk via Support Vector Machines (SVM), discovers multidimensional density outliers with DBSCAN, renders physical and logical topology polylines on an interactive Leaflet map, provides simulated historical telemetry replay, streams real-time ingestion events via WebSockets, and enforces role-based access control (RBAC).
+NEXUSNET is an enterprise Network Operations Center (NOC) intelligence and health monitoring system. It processes telemetry across 6,000+ global telecom network assets, evaluates provisional SLA policy rules, predicts investigation priority via a Supervised Random Forest Classifier, identifies multivariate outliers via Isolation Forest anomaly detection, generates academic PDF operational reports, and provides an integrated Gemini-powered NOC Assistant.
 
 ---
 
-## 🏛️ System Architecture
+## 📁 Project Directory Structure
 
 ```
-                  ┌──────────────────────────────────────────────┐
-                  │          React 18 + Vite Frontend            │
-                  │  (Tailwind CSS, Leaflet Maps, Recharts, SVG) │
-                  └───────┬──────────────────────────────▲───────┘
-                          │ HTTP REST                    │ WebSocket
-                          │ /api/health/dashboard        │ /api/ws/telemetry
-                          │ /api/replay/*                │ (Live Ingestion)
-                          │ /api/topology/links          │
-                          │ /api/auth/*                  │
-                          ▼                              │
-                  ┌──────────────────────────────────────┴───────┐
-                  │             FastAPI Backend                  │
-                  │  - Authentication & RBAC (Bearer / scrypt)   │
-                  │  - Real-Time ConnectionManager Broadcast     │
-                  │  - Transparent NSI & Health Aggregations     │
-                  │  - Historical Analytics Engine               │
-                  └───────┬──────────────────────────────┬───────┘
-                          │                              │
-         ┌────────────────┴───────────────┐              │
-         ▼                                ▼              ▼
-┌──────────────────┐            ┌──────────────────┐  ┌──────────────────┐
-│   ML Pipeline    │            │  SQLite Database │  │ Network Topology │
-│ - SVM Classifier │            │  - 6,004 Assets  │  │ - Fiber Optics   │
-│ - DBSCAN Cluster │            │  - 6,007 Telemetry│  │ - Microwave      │
-│ - StandardScaler │            │  - Audit Users   │  │ - Satellite Mesh │
-└──────────────────┘            └──────────────────┘  └──────────────────┘
+ds-frontend-main/
+│
+├── backend/                  # Python FastAPI Backend Service
+│   ├── app/
+│   │   ├── api/routes/       # Modular API route controllers (e.g. chatbot.py)
+│   │   ├── core/             # Application configuration & safe .env loader (config.py)
+│   │   └── services/         # Gemini chat service & grounded prompt builder
+│   ├── data/                 # Backend runtime caches and explanations JSON
+│   │   ├── final_model_predictions.csv
+│   │   └── network_health_v3_explanations.json
+│   ├── reports/              # Storage directory for generated PDF reports
+│   ├── tests/                # Automated pytest suite (29 tests)
+│   │   └── test_api.py
+│   ├── .env                  # Environment configuration & Gemini API key (git-ignored)
+│   ├── .env.example          # Environment configuration template
+│   ├── main.py               # FastAPI application entry point & SLA rule engine
+│   ├── report_generator.py   # Academic PDF report generation engine
+│   └── requirements.txt      # Python backend dependencies
+│
+├── frontend/                 # React 18 + Vite + Tailwind CSS Frontend
+│   ├── src/
+│   │   ├── api/              # Typed REST client & custom hooks
+│   │   ├── components/       # UI components & global NOC Chatbot modal
+│   │   ├── pages/            # 4 core views (Command Center, Network Map, Trends, Analyze Telemetry)
+│   │   ├── types/            # TypeScript interfaces and schemas
+│   │   ├── App.tsx           # Main application routing & global chatbot mount
+│   │   └── main.tsx          # React application root
+│   ├── index.html            # Single-page application entry point
+│   ├── package.json          # Node dependencies & build scripts
+│   ├── tailwind.config.js    # Custom Averon SaaS design theme
+│   ├── tsconfig.json         # TypeScript compiler configuration
+│   └── vite.config.ts        # Vite dev server configuration & backend proxy
+│
+├── data/                     # Dataset Directory
+│   └── raw/
+│       └── nexusnet_preprocessed_feature_engineered.csv  # 6,000-asset baseline metadata
+│
+├── models/                   # Machine Learning Model Artifacts
+│   ├── random_forest_classifier.joblib                   # Supervised Random Forest Classifier
+│   ├── anomaly_detector.joblib                           # Unsupervised Isolation Forest Anomaly Detector
+│   ├── feature_config.json                               # RF feature specification
+│   ├── anomaly_feature_config.json                       # IF feature specification
+│   ├── model_metadata.json                               # Model metrics & metadata
+│   └── encoder.joblib                                    # Category encoder
+│
+├── outputs/                  # Model Outputs & Evaluation Documentation
+│   ├── final_model_predictions.csv                       # Consolidated predictions
+│   ├── network_health_v3_explanations.json               # Full JSON explanations catalog
+│   ├── network_health_v3_results.csv                     # V3 policy evaluation results
+│   ├── model_training_dataset.csv                        # Normalized training split
+│   ├── classifier_predictions.csv                        # RF validation predictions
+│   ├── anomaly_detection_results.csv                     # Isolation Forest output scores
+│   ├── random_forest_evaluation.md                       # Classifier performance audit
+│   └── isolation_forest_evaluation.md                    # Anomaly detection audit
+│
+├── .gitignore                # Git ignore configuration
+└── README.md                 # Project architecture & user guide
 ```
 
 ---
 
-## 🔑 Key Features & Implementation Overview
+## 🚀 Quick Start Guide
 
-### 1. 📈 Network Health Dashboard (`/health`)
-- **12 Database-Backed KPI Cards**: Total Network Assets, Normal Assets, At-Risk Assets, At-Risk %, DBSCAN Anomaly Count, Network Availability %, Avg Signal Strength (dBm), Avg Latency (ms), Avg Packet Loss (%), Avg Traffic Load (%), Avg Resource Utilization (%), and Mean Network Stress Index (NSI).
-- **Explainable Health Calculation**:
-  $$\text{NSI} = \frac{\text{Traffic Load} + \text{Resource Utilization} + \text{Packet Loss} + \text{Call Drop Rate}}{4}$$
-  $$\text{Health Score} = 100 - (0.45 \times \text{NSI} + 0.35 \times \text{RiskPct} + 0.20 \times \text{AnomalyPct})$$
-- **Configurable Tiers**: Healthy (Score $\ge 75$), Warning ($50 \le \text{Score} < 75$), Critical ($\text{Score} < 50$).
-- **Responsive Analytics Charts**: Normal vs At Risk distribution, DBSCAN anomaly breakdown, NSI distribution, latency & packet loss per asset type, signal strength distribution, and regional risk distribution.
-- **Multidimensional Filters**: Continent, Country, City, Asset Type, and Status filters with backend SQL aggregation.
-- **Asset Details Drawer**: Complete telemetry, derived metrics, SVM prediction, DBSCAN cluster label, and decision-support disclaimers.
-
-### 2. ⏪ Feature 1: Simulated Historical Telemetry Replay (`/map`)
-- Step-through chronological replay of the 24-hour observation cycle (`2026-09-16 00:00:00` to `23:00:00`).
-- **Controls**: Play, Pause, Step Backward, Step Forward, Reset to Hour 0, Playback Speed (1x, 2x, 5x, 10x), and interactive 0–23h scrubber.
-- Dynamic marker updates, simulated timestamp badge, and transparent labeling as **Simulated Historical Replay**.
-
-### 3. ⚡ Feature 2: Real-Time WebSocket Streaming (`/api/ws/telemetry`)
-- Full duplex WebSocket endpoint with client heartbeat (ping/pong) and auto-reconnect logic.
-- Asynchronous broadcasting triggered whenever new telemetry is uploaded via single entry or bulk CSV ingestion.
-- Truthful Topbar connection pill: `Connected — awaiting new telemetry` when idle.
-
-### 4. 🛡️ Feature 3: Authentication and Role-Based Access Control (RBAC)
-- Password hashing with **scrypt** and secure bearer session token generation (`secrets.token_urlsafe(32)`).
-- Three discrete operational roles:
-  - **NOC Analyst**: Dashboard monitoring, map inspection, telemetry ingestion, permitted inference.
-  - **Network Engineer**: Root-cause diagnostics, incident lifecycle resolution, threshold investigating.
-  - **Administrator**: User account management, system configuration, link topology administration.
-- CLI User Management: `backend/app/manage_users.py`.
-- Fast Presentation Role Switcher in the top bar for evaluation demonstrations.
-
-### 5. 🌐 Feature 4: Physical & Logical Network Links (`/map`)
-- Leaflet `Polyline` topology layer connecting real infrastructure coordinates.
-- Supports **Fiber Optic** (cyan), **Microwave Link** (amber), and **Satellite Mesh** (purple).
-- Seeded with 30 realistic backbone links across Mumbai, Pune, Delhi, Bengaluru, Hyderabad, Chennai, and Singapore.
-- Explicitly labeled in the UI and database schema as **Demonstration Topology** (`is_synthetic=True`) to preserve data integrity.
-- Interactive link click drawer with bandwidth capacity, live utilization %, and operational status.
-
-### 6. 📅 Feature 5: Multi-Day Historical Trends (`/analytics`)
-- Historical aggregation engine supporting date-range filtering, asset-specific filtering, and hourly averages.
-- Visualizes mean NSI, resource utilization, latency, and packet loss trends over time with Recharts.
-- Clear empty-state handling explaining available database coverage (`2026-09-16`) and accepting future multi-day uploads.
-
----
-
-## 🚀 Quickstart & Local Setup
-
-### 1. Prerequisites
-- **Python**: 3.10+ (tested with Python 3.11, 3.12, 3.14)
-- **Node.js**: v18+ and **npm**: v9+
-
-### 2. Backend Setup & Run
+### 1. Backend Setup & Startup
 
 ```bash
-# Clone the repository
-git clone https://github.com/siddharthpandharipande/Telecom-Network-Intelligence-System-.git
-cd Telecom-Network-Intelligence-System-
-
-# (Optional) Create virtual environment
-python -m venv venv
-# Windows:
-.\venv\Scripts\activate
-# Linux/macOS:
-source venv/bin/activate
-
 # Install Python dependencies
 pip install -r backend/requirements.txt
 
-# Start FastAPI server on port 8000
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+# Start the FastAPI server (from repository root)
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-The backend API documentation is available at `http://127.0.0.1:8000/docs`.
+- Interactive API Documentation (Swagger UI): [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- Alternative direct execution: `python backend/main.py`
 
-### 3. Frontend Setup & Run
+### 2. Frontend Setup & Startup
 
 ```bash
-# From repository root
+# Navigate to frontend and install dependencies
 cd frontend
-
-# Install npm dependencies
 npm install
 
-# Start Vite dev server on port 3000
+# Start Vite development server
 npm run dev
 ```
-Open `http://localhost:3000` in your web browser.
+- Access the web interface at: [http://localhost:3000](http://localhost:3000)
 
 ---
 
-## 👤 User Accounts & Role Credentials
+## 🧪 Testing & Verification
 
-The database automatically seeds 3 demonstration accounts on initial startup:
-
-| Username | Password | Role | Description |
-| :--- | :--- | :--- | :--- |
-| `admin` | `NocAdmin@2026` | **Administrator** | Full configuration, user management & topology editing |
-| `engineer` | `Engineer@2026` | **Network Engineer** | Diagnostics, incident management, threshold analysis |
-| `analyst` | `Analyst@2026` | **NOC Analyst** | Operations dashboard, live map, asset inspection |
-
-### Safe Initial Admin Seeding via CLI
-
-To create a new administrator or reset credentials without hardcoding:
+Run the automated backend test suite (29 tests validating health, insights, geographic lookups, PDF generation, and NOC Chatbot):
 
 ```bash
-# Set PYTHONPATH to repository root
-python backend/app/manage_users.py create --username custom_admin --password "StrongPassword123" --email "admin@telecom.org" --role admin
+python -m pytest backend/tests/test_api.py -v
 ```
 
-To list all existing users:
-```bash
-python backend/app/manage_users.py list
-```
-
----
-
-## 🧪 Automated Testing & Verification
-
-### Running Backend Pytest Suite
+Build the production frontend bundle:
 
 ```bash
-python -m pytest backend/tests -v
+npm run build --prefix frontend
 ```
-**Results**: **32 passed, 0 failures**.
-Covers:
-- Authentication, token generation, login/logout, unauthorized access
-- Demonstration topology CRUD & self-link prevention
-- Replay boundaries, slices, and metadata
-- Network Health Dashboard 12 KPI calculations
-- Historical trends aggregation
-- SVM feature engineering and inference determinism
-- DBSCAN anomaly detection reproduction
-- Ingestion validation and duplicate prevention
-
-### Running Frontend Production Build
-
-```bash
-cd frontend
-npm run build
-```
-**Results**:
-- TypeScript type checking: `tsc` passed with 0 errors.
-- Vite production bundle built cleanly into `dist/`.
-
----
-
-## 📡 API Reference Summary
-
-| Method | Endpoint | Description | Role / Auth |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/login` | Authenticate with username & password, returns Bearer token | Public |
-| `POST` | `/api/auth/logout` | Invalidate current session token | Authenticated |
-| `GET` | `/api/auth/me` | Return active user profile and permissions | Authenticated |
-| `GET` | `/api/health/dashboard` | 12 KPIs, transparent NSI formula, and 6 distribution sets | Public / Analyst |
-| `GET` | `/api/replay/meta` | Replay window metadata (start/end timestamp, hourly steps) | Public / Analyst |
-| `GET` | `/api/replay/slice?hour=H` | Telemetry slice for specific simulated hour (0–23) | Public / Analyst |
-| `WS` | `/api/ws/telemetry` | WebSocket stream broadcasting new telemetry ingestions | Public / Analyst |
-| `GET` | `/api/topology/links` | Retrieve physical/logical link polylines | Public / Analyst |
-| `POST` | `/api/topology/links` | Create network link between assets | Administrator |
-| `GET` | `/api/analytics/history` | Multi-day and hourly historical trend analysis | Public / Analyst |
-
----
-
-## ⚖️ Model & Data Integrity Note
-
-- **SVM Risk vs DBSCAN Anomaly**: SVM predicts whether an asset is **NORMAL** or **AT RISK** based on supervised multidimensional degradation indicators. DBSCAN detects points outside dense operating clusters as **ANOMALIES** (noise). These models operate independently and are never conflated.
-- **Decision-Support Outputs**: Model predictions represent algorithmic risk classifications to guide engineering triage, not infallible mechanical diagnoses.
-- **Topology Integrity**: The 30 demo links are explicitly tagged `is_synthetic=True` and labeled in the UI as **Demonstration Topology** to avoid confusing simulated demo topology with genuine survey infrastructure.

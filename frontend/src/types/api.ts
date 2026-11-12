@@ -1,20 +1,44 @@
 /** API response and request TypeScript interfaces for NEXUSNET. */
 export interface ApiErrorPayload {
-  detail: string;
-  code: string;
-  errors: string[];
+  detail?: string;
+  error?: string;
+  code?: string;
+  errors?: string[];
+  asset_id?: string;
 }
 
 export class ApiError extends Error {
   code: string;
   errors: string[];
+  status?: number;
+  assetId?: string;
 
-  constructor(payload: ApiErrorPayload, statusText?: string) {
-    super(payload.detail || statusText || 'API Error');
+  constructor(payload: ApiErrorPayload, statusText?: string, status?: number) {
+    const message = payload.error || payload.detail || statusText || 'API Error';
+    super(message);
     this.name = 'ApiError';
-    this.code = payload.code || 'UNKNOWN_ERROR';
+    this.code = payload.code || (status === 404 ? 'NOT_FOUND' : 'UNKNOWN_ERROR');
     this.errors = payload.errors || [];
+    this.status = status;
+    this.assetId = payload.asset_id;
   }
+}
+
+export interface AssetHealthResponse {
+  asset_id: string;
+  asset_type: string;
+  investigation_priority: 'Routine' | 'Medium' | 'High' | string;
+  priority_reason: string;
+  what_happened: string;
+  why_flagged: string[];
+  what_to_do_next: string[];
+  not_evaluated: string[];
+  limitation: string;
+  classifier_prediction: 'Routine' | 'Medium' | 'High' | string;
+  classifier_confidence: number;
+  anomaly_score: number;
+  is_anomalous: boolean;
+  final_decision_support_flag: 'Investigate' | 'Monitor' | string;
 }
 
 export interface HealthResponse {
@@ -23,6 +47,184 @@ export interface HealthResponse {
   db_readings: number;
   db_assets: number;
   models_loaded: boolean;
+}
+
+export interface InsightsOverview {
+  total_assets: number;
+  investigate_count: number;
+  monitor_count: number;
+  high_priority_count: number;
+  anomalous_count: number;
+  suggestion: string;
+}
+
+export interface InsightsByRegion {
+  most_affected_city: string;
+  city_high_priority_count: number;
+  most_affected_country: string;
+  country_high_priority_count: number;
+  most_affected_continent: string;
+  continent_high_priority_count: number;
+  most_affected_asset_type: string;
+  asset_type_high_priority_count: number;
+  suggestion: string;
+}
+
+export interface TopAssetItem {
+  asset_id: string;
+  asset_type: string;
+  investigation_priority: string;
+  main_issue: string;
+  city: string;
+  country?: string;
+  continent?: string;
+  anomaly_score: number;
+  is_anomalous: boolean;
+  final_decision_support_flag: string;
+  action: string;
+}
+
+export interface InsightsTopAssets {
+  assets: TopAssetItem[];
+  suggestion: string;
+}
+
+export interface TelemetryAnalysisRequest {
+  asset_id?: string;
+  asset_type?: string;
+  latitude?: number;
+  longitude?: number;
+  city?: string;
+  region?: string;
+  country?: string;
+  continent?: string;
+  signal_strength_dbm?: number;
+  latency_ms?: number;
+  packet_loss_pct?: number;
+  throughput_mbps?: number;
+  connected_users?: number;
+  traffic_load_pct?: number;
+  call_drop_rate_pct?: number;
+  resource_utilization_pct?: number;
+  // Alternate key aliases
+  signal?: number;
+  latency?: number;
+  loss?: number;
+  throughput?: number;
+  users?: number;
+  load?: number;
+  drops?: number;
+  cpu?: number;
+}
+
+export interface TelemetryAnalysisResponse {
+  asset_id: string;
+  asset_type: string;
+  investigation_priority: 'Routine' | 'Medium' | 'High' | string;
+  final_decision_support_flag: 'Investigate' | 'Monitor' | string;
+  main_issue: string;
+  breached_measurements: string[];
+  recommended_actions: string[];
+  not_evaluated?: string[];
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  continent?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_message?: string | null;
+  box1_suggestion: string;
+  box2_suggestion: string;
+  telemetry_values?: Record<string, any> | null;
+  measurement_status?: Record<string, string> | null;
+  classifier_prediction?: string | null;
+  classifier_confidence?: number | null;
+  anomaly_score?: number | null;
+  is_anomalous?: boolean | null;
+}
+
+export interface AssetLocationResponse {
+  asset_id: string;
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  continent?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+// ----------------------------------------------------------------------------
+// Network Trends Types
+// ----------------------------------------------------------------------------
+export interface TrendFilterParams {
+  asset_type?: string;
+  country_or_region?: string;
+  priority?: string;
+}
+
+export interface TrendFilterOptions {
+  asset_types: string[];
+  countries_and_regions: string[];
+  priorities: string[];
+}
+
+export interface PriorityTrendItem {
+  priority: string;
+  count: number;
+  percentage: number;
+}
+
+export interface PriorityTrendsData {
+  items: PriorityTrendItem[];
+  total_assets: number;
+  investigate_count: number;
+  suggestion: string;
+  has_manual_analysis?: boolean;
+  manual_asset_id?: string | null;
+}
+
+export interface AssetTypeTrendItem {
+  asset_type: string;
+  total_count: number;
+  high_priority_count: number;
+  high_priority_pct: number;
+}
+
+export interface AssetTypeTrendsData {
+  items: AssetTypeTrendItem[];
+  highest_asset_type?: string | null;
+  highest_percentage: number;
+  suggestion: string;
+  has_manual_analysis?: boolean;
+}
+
+export interface LocationTrendItem {
+  location: string;
+  high_priority_count: number;
+  total_count: number;
+  country?: string | null;
+}
+
+export interface LocationTrendsData {
+  items: LocationTrendItem[];
+  top_location?: string | null;
+  top_count: number;
+  suggestion: string;
+  has_manual_analysis?: boolean;
+}
+
+export interface IssueTrendItem {
+  measurement: string;
+  count: number;
+  percentage: number;
+}
+
+export interface CommonIssuesTrendsData {
+  items: IssueTrendItem[];
+  top_measurement?: string | null;
+  top_count: number;
+  suggestion: string;
+  has_manual_analysis?: boolean;
 }
 
 export interface StatusLegendItem {
@@ -585,3 +787,30 @@ export interface HistoricalTrendsData {
   };
   coverage_note: string;
 }
+
+// ----------------------------------------------------------------------------
+// Gemini NOC Assistant Chatbot Interfaces
+// ----------------------------------------------------------------------------
+export interface ChatbotAskRequest {
+  question: string;
+  sessionId?: string;
+  telemetryContext?: any;
+}
+
+export interface ChatbotAskResponse {
+  answer: string;
+  sessionId: string;
+  sources: string[];
+  timestamp: string;
+  configured?: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  sender: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+  sources?: string[];
+  isError?: boolean;
+}
+

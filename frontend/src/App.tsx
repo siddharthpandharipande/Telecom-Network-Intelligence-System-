@@ -1,87 +1,68 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { TelemetryProvider } from './context/TelemetryContext';
-import { ThemeProvider } from './context/ThemeContext';
-import { AuthProvider } from './context/AuthContext';
-import { Sidebar } from './components/layout/Sidebar';
-import { Topbar } from './components/layout/Topbar';
-
-import { useApiStatus } from './api/hooks';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { Header } from './components/layout/Header';
+import { Footer } from './components/layout/Footer';
+import { AmbientGlow } from './components/common/AmbientGlow';
 import { OfflineBanner } from './components/common/OfflineBanner';
-import { AuthModal } from './components/common/AuthModal';
+import { NocChatbot } from './components/common/NocChatbot';
+import { useApiStatus } from './api/hooks';
 
-// Pages
-import { Overview } from './pages/Overview';
-import { DataInput } from './pages/DataInput';
-import { NetworkHealth } from './pages/NetworkHealth';
-import { LiveMap } from './pages/LiveMap';
-import { SVMPrediction } from './pages/SVMPrediction';
-import { DBSCANAnomaly } from './pages/DBSCANAnomaly';
-import { AlertsIncidents } from './pages/AlertsIncidents';
-import { NetworkAssets } from './pages/NetworkAssets';
-import { Analytics } from './pages/Analytics';
-import { Settings } from './pages/Settings';
-import { ModelCardPage } from './pages/ModelCardPage';
+// The 4 Core Pages
+import { CommandCenter } from './pages/CommandCenter';
+import { NetworkMap } from './pages/NetworkMap';
+import { NetworkTrends } from './pages/NetworkTrends';
+import { AnalyzeTelemetry } from './pages/AnalyzeTelemetry';
+
+const AnimatedRoutes: React.FC = () => {
+  const location = useLocation();
+
+  return (
+    <div key={location.pathname} className="w-full animate-page-transition">
+      <Routes location={location}>
+        <Route path="/" element={<CommandCenter />} />
+        <Route path="/command-center" element={<CommandCenter />} />
+        <Route path="/network-map" element={<NetworkMap />} />
+        <Route path="/network-trends" element={<NetworkTrends />} />
+        <Route path="/analyze-telemetry" element={<AnalyzeTelemetry />} />
+        <Route path="/asset-investigation" element={<Navigate to="/" replace />} />
+        <Route path="/asset-investigation/:id" element={<Navigate to="/" replace />} />
+        <Route path="/asset-detail" element={<Navigate to="/" replace />} />
+        <Route path="/asset-detail/:id" element={<Navigate to="/" replace />} />
+        <Route path="/assets/:id" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<CommandCenter />} />
+      </Routes>
+    </div>
+  );
+};
 
 export const App: React.FC = () => {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const { isOnline, checkHealth, isChecking } = useApiStatus();
 
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <TelemetryProvider>
-          <Router>
-            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col antialiased transition-colors duration-200">
-              {/* Role-Based Authentication Modal */}
-              <AuthModal />
+    <Router>
+      <div className="min-h-screen bg-[#FAF9FF] text-slate-900 font-sans relative flex flex-col selection:bg-purple-100 selection:text-purple-900">
+        {/* Ambient Ethereal Glows (Averon Visual DNA) */}
+        <AmbientGlow />
 
-              {/* Global API Offline Banner */}
-              <OfflineBanner isOnline={isOnline} onRetry={checkHealth} isChecking={isChecking} />
+        {/* API Offline Banner */}
+        <OfflineBanner isOnline={isOnline} onRetry={checkHealth} isChecking={isChecking} />
 
-            {/* Topbar Header */}
-            <Topbar
-              collapsed={sidebarCollapsed}
-              toggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            />
+        {/* Sticky Top Navigation Header */}
+        <Header isOnline={isOnline} />
 
-            {/* Left Navigation Sidebar */}
-            <Sidebar
-              collapsed={sidebarCollapsed}
-              toggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            />
+        {/* Main Workspace Area with smooth transitions */}
+        <main className="flex-1 w-full max-w-[1440px] mx-auto px-6 py-10 relative z-10">
+          <AnimatedRoutes />
+        </main>
 
-            {/* Main Content Workspace Area */}
-            <main
-              className={`flex-1 transition-all duration-300 pt-16 ${
-                sidebarCollapsed ? 'ml-20' : 'ml-64'
-              }`}
-            >
-              {/* Application Page Router */}
-              <div className="w-full min-h-[calc(100vh-4rem)]">
-                <Routes>
-                  <Route path="/" element={<Overview />} />
-                  <Route path="/data-input" element={<DataInput />} />
-                  <Route path="/health" element={<NetworkHealth />} />
-                  <Route path="/map" element={<LiveMap />} />
-                  <Route path="/svm" element={<SVMPrediction />} />
-                  <Route path="/dbscan" element={<DBSCANAnomaly />} />
-                  <Route path="/incidents" element={<AlertsIncidents />} />
-                  <Route path="/assets" element={<NetworkAssets />} />
-                  <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/model" element={<ModelCardPage />} />
-                  <Route path="/settings" element={<Settings />} />
-                </Routes>
-              </div>
-            </main>
-          </div>
-        </Router>
-        </TelemetryProvider>
-      </AuthProvider>
-    </ThemeProvider>
+        {/* Global Gemini-Powered NOC Assistant Chatbot */}
+        <NocChatbot />
+
+        {/* Averon SaaS Footer */}
+        <Footer />
+      </div>
+    </Router>
   );
 };
 
 export default App;
-
-

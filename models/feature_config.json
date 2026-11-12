@@ -1,0 +1,63 @@
+{
+  "numeric_features": [
+    "Signal_Strength_dBm",
+    "Latency_ms",
+    "Packet_Loss_pct",
+    "Throughput_Mbps",
+    "Connected_Users",
+    "Traffic_Load_pct",
+    "Call_Drop_Rate_pct",
+    "Resource_Utilization_pct",
+    "Network_Stress_Index",
+    "Throughput_per_User",
+    "Signal_Quality_Score",
+    "Hour",
+    "Peak_Hour"
+  ],
+  "categorical_features": [
+    "Asset_Type"
+  ],
+  "encoded_categorical_features": [
+    "Asset_Type_Base Station",
+    "Asset_Type_Cell Tower",
+    "Asset_Type_Network Gateway",
+    "Asset_Type_Router"
+  ],
+  "all_model_features": [
+    "Signal_Strength_dBm",
+    "Latency_ms",
+    "Packet_Loss_pct",
+    "Throughput_Mbps",
+    "Connected_Users",
+    "Traffic_Load_pct",
+    "Call_Drop_Rate_pct",
+    "Resource_Utilization_pct",
+    "Network_Stress_Index",
+    "Throughput_per_User",
+    "Signal_Quality_Score",
+    "Hour",
+    "Peak_Hour",
+    "Asset_Type_Base Station",
+    "Asset_Type_Cell Tower",
+    "Asset_Type_Network Gateway",
+    "Asset_Type_Router"
+  ],
+  "target": "Investigation_Priority",
+  "target_classes": [
+    "Routine",
+    "Medium",
+    "High"
+  ],
+  "excluded_columns": [
+    "Asset_ID",
+    "Latitude",
+    "Longitude",
+    "City",
+    "Country",
+    "Region",
+    "Continent",
+    "Timestamp",
+    "Timestamp_dt",
+    "Network_Status"
+  ]
+}
